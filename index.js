@@ -1,12 +1,15 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const ffmpeg = require('fluent-ffmpeg');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('children_process');
 
 // =============================================================
-// 1. LIST NOMOR IZIN KICK (Hanya Angka Murni)
+// 1. LIST NOMOR IZIN KICK
 // =============================================================
 const listBolehKick = [
     '6281298697777'
@@ -32,25 +35,52 @@ const listNickTikTok = [
     "𝙆 𝙮 𝙤"
 ];
 
-// Fungsi Helper Format Angka
 function formatNumber(num) {
     if (!num) return '0';
     return Number(num).toLocaleString('id-ID');
 }
 
-// Fungsi Scraper TikTok Direct Bypass
+// Helper Konversi Foto Ke Stiker (Bypass Sharp via FFmpeg)
+async function imageToSticker(buffer) {
+    const tmpInput = path.join(__dirname, `tmp_${Date.now()}.jpg`);
+    const tmpOutput = path.join(__dirname, `tmp_${Date.now()}.webp`);
+    
+    fs.writeFileSync(tmpInput, buffer);
+
+    return new Promise((resolve, reject) => {
+        ffmpeg(tmpInput)
+            .outputOptions([
+                '-vcodec libwebp',
+                '-vf scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
+            ])
+            .toFormat('webp')
+            .save(tmpOutput)
+            .on('end', () => {
+                const stickerBuf = fs.readFileSync(tmpOutput);
+                if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
+                if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+                resolve(stickerBuf);
+            })
+            .on('error', (err) => {
+                if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
+                if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+                reject(err);
+            });
+    });
+}
+
+// Scraper TikTok Multi-Server
 async function getTikTokProfile(username) {
     const cleanUser = username.replace('@', '').trim();
 
-    // SERVER 1: Direct Web Scraping (TikTok Web HTML Data)
+    // Server 1: TikTok Web HTML
     try {
-        const url = `https://www.tiktok.com/@${cleanUser}`;
-        const response = await axios.get(url, {
+        const response = await axios.get(`https://www.tiktok.com/@${cleanUser}`, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9'
             },
-            timeout: 10000
+            timeout: 8000
         });
 
         const $ = cheerio.load(response.data);
@@ -76,18 +106,16 @@ async function getTikTokProfile(username) {
                 };
             }
         }
-    } catch (e) {
-        // Lanjut ke API Cadangan
-    }
+    } catch (e) {}
 
-    // SERVER 2: API Engine Backup (Tiktod)
+    // Server 2: API Backup
     try {
-        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 10000 });
+        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 8000 });
         if (res.data && res.data.result) {
             const data = res.data.result;
             return {
                 status: true,
-                nickname: data.nickname || data.user || cleanUser,
+                nickname: data.nickname || cleanUser,
                 username: data.username || cleanUser,
                 avatar: data.avatar || data.profile,
                 followers: formatNumber(data.followers || data.follower),
@@ -96,9 +124,7 @@ async function getTikTokProfile(username) {
                 createDate: 'Terverifikasi System'
             };
         }
-    } catch (e) {
-        // Gagal
-    }
+    } catch (e) {}
 
     return { status: false };
 }
@@ -125,9 +151,7 @@ async function startBot() {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             console.log('Koneksi terputus. Menghubungkan ulang...', shouldReconnect);
-            if (shouldReconnect) {
-                startBot();
-            }
+            if (shouldReconnect) startBot();
         } else if (connection === 'open') {
             console.log('✅ Bot WhatsApp berhasil terhubung!');
         }
@@ -151,24 +175,14 @@ async function startBot() {
             const pesan = body.trim();
             const command = pesan.toLowerCase().split(' ')[0];
 
-            // FITUR 1: .ping
+            // .ping
             if (command === '.ping') {
                 const start = Date.now();
                 const latency = Date.now() - start;
-
-                await sock.sendMessage(from, { 
-                    text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` 
-                }, { quoted: msg });
+                await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` }, { quoted: msg });
             } 
 
-            // FITUR 2: Sapaan
-            else if (command === 'halo' || command === 'hi' || command === '.hi') {
-                await sock.sendMessage(from, { 
-                    text: 'hai ganteng aku muach' 
-                }, { quoted: msg });
-            }
-
-            // FITUR 3: .listmem
+            // .listmem
             else if (command === '.listmem') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -192,8 +206,8 @@ async function startBot() {
                 }
             }
 
-            // FITUR 4: .stiker
-            else if (command === '.stiker' || command === '.s') {
+            // .stiker / .s / .wm
+            else if (command === '.stiker' || command === '.s' || command === '.wm') {
                 try {
                     const typeMsg = Object.keys(msg.message)[0];
                     const isImage = typeMsg === 'imageMessage';
@@ -213,49 +227,14 @@ async function startBot() {
                     }
 
                     const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
-                    const sticker = new Sticker(buffer, { pack: 'My Bot Sticker', author: 'Bot WhatsApp', type: StickerTypes.FULL, quality: 70 });
-                    const stickerBuffer = await sticker.toBuffer();
+                    const stickerBuffer = await imageToSticker(buffer);
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
                 } catch (err) {
                     console.error('Error stiker:', err);
                 }
             }
 
-            // FITUR 5: .wm
-            else if (command === '.wm') {
-                try {
-                    const typeMsg = Object.keys(msg.message)[0];
-                    const isImage = typeMsg === 'imageMessage';
-                    const isQuotedImage = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
-                    const isQuotedSticker = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage;
-
-                    if (!isImage && !isQuotedImage && !isQuotedSticker) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim/reply foto/stiker dengan format:\n*.wm NamaPack|NamaAuthor*' }, { quoted: msg });
-                        return;
-                    }
-
-                    const textWm = pesan.slice(3).trim();
-                    const packName = textWm.includes('|') ? textWm.split('|')[0] : (textWm || 'My Bot Sticker');
-                    const authorName = textWm.includes('|') ? textWm.split('|')[1] : 'Bot WhatsApp';
-
-                    let targetMsg = msg;
-                    if (isQuotedImage || isQuotedSticker) {
-                        targetMsg = {
-                            key: { remoteJid: from, id: msg.message.extendedTextMessage.contextInfo.stanzaId, participant: msg.message.extendedTextMessage.contextInfo.participant },
-                            message: msg.message.extendedTextMessage.contextInfo.quotedMessage
-                        };
-                    }
-
-                    const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
-                    const sticker = new Sticker(buffer, { pack: packName, author: authorName, type: StickerTypes.FULL, quality: 70 });
-                    const stickerBuffer = await sticker.toBuffer();
-                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error .wm:', err);
-                }
-            }
-
-            // FITUR 6: .kick
+            // .kick
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -266,15 +245,12 @@ async function startBot() {
                 const punyaIzin = isFromMe || listBolehKick.includes(senderNumber);
 
                 if (!punyaIzin) {
-                    await sock.sendMessage(from, { 
-                        text: '❌ Anda tidak memiliki izin untuk menggunakan perintah .kick!' 
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ Anda tidak memiliki izin untuk menggunakan perintah .kick!' }, { quoted: msg });
                     return;
                 }
 
                 try {
                     let targetUser = '';
-
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const mentionedJid = contextInfo?.mentionedJid;
                     const quotedParticipant = contextInfo?.participant;
@@ -286,28 +262,20 @@ async function startBot() {
                     }
 
                     if (!targetUser) {
-                        await sock.sendMessage(from, { 
-                            text: '⚠️ Tag orang yang ingin di-kick atau reply pesannya!\n\nContoh:\n*.kick @user*' 
-                        }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '⚠️ Tag orang yang ingin di-kick atau reply pesannya!\n\nContoh:\n*.kick @user*' }, { quoted: msg });
                         return;
                     }
 
                     await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
-
-                    await sock.sendMessage(from, { 
-                        text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup!`,
-                        mentions: [targetUser]
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup!`, mentions: [targetUser] }, { quoted: msg });
 
                 } catch (err) {
                     console.error('Error kick:', err);
-                    await sock.sendMessage(from, { 
-                        text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' 
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' }, { quoted: msg });
                 }
             }
 
-            // FITUR 7: .cn
+            // .cn
             else if (command === '.cn') {
                 try {
                     const args = pesan.split(' ').slice(1);
@@ -315,13 +283,10 @@ async function startBot() {
 
                     if (!param) {
                         let teks = `CN (copy aja)\n`;
-
                         for (let i = 0; i < listNickTikTok.length; i++) {
                             teks += `${i + 1}. ${listNickTikTok[i]}\n`;
                         }
-
                         teks += `\npilih salah satu aja ya (contoh: .cn 1)`;
-
                         await sock.sendMessage(from, { text: teks }, { quoted: msg });
                         return;
                     }
@@ -333,19 +298,13 @@ async function startBot() {
                         selectedNick = listNickTikTok[nickIndex];
                     } else {
                         const foundNick = listNickTikTok.find(n => n.toLowerCase().includes(param.toLowerCase()));
-                        if (foundNick) {
-                            selectedNick = foundNick;
-                        }
+                        if (foundNick) selectedNick = foundNick;
                     }
 
                     if (selectedNick) {
-                        await sock.sendMessage(from, { 
-                            text: selectedNick 
-                        }, { quoted: msg });
+                        await sock.sendMessage(from, { text: selectedNick }, { quoted: msg });
                     } else {
-                        await sock.sendMessage(from, { 
-                            text: `❌ Nickname nomor *"${param}"* tidak ditemukan!` 
-                        }, { quoted: msg });
+                        await sock.sendMessage(from, { text: `❌ Nickname nomor *"${param}"* tidak ditemukan!` }, { quoted: msg });
                     }
 
                 } catch (err) {
@@ -353,16 +312,14 @@ async function startBot() {
                 }
             }
 
-            // FITUR 8: .verif (Scraping Langsung Ke Server TikTok)
+            // .verif
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const args = pesan.split(' ').slice(1);
                     const usernameInput = args.join(' ').trim();
 
                     if (!usernameInput) {
-                        await sock.sendMessage(from, { 
-                            text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` 
-                        }, { quoted: msg });
+                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` }, { quoted: msg });
                         return;
                     }
 
@@ -395,9 +352,7 @@ async function startBot() {
 
                 } catch (err) {
                     console.error('Error verif:', err);
-                    await sock.sendMessage(from, { 
-                        text: '❌ Terjadi kesalahan sistem saat verifikasi.' 
-                    }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ Terjadi kesalahan sistem saat verifikasi.' }, { quoted: msg });
                 }
             }
         }
