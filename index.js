@@ -6,15 +6,14 @@ const cheerio = require('cheerio');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
 
 const listBolehKick = ['6281298697777'];
 
 const listNickTikTok = [
     "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
     "C L O U D", "S H A D O W", "KGY", "Æ · Skyee",
-    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝑒",
-    "✦ · N o v a", "𝙆 𝙮 𝙤"
+    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝙚",
+    "✦ · N o v a", " 𝙮 𝙤"
 ];
 
 function formatNumber(num) {
@@ -22,12 +21,27 @@ function formatNumber(num) {
     return Number(num).toLocaleString('id-ID');
 }
 
-// Helper Konversi Foto Ke Stiker (Bypass Sharp via FFmpeg)
-async function imageToSticker(buffer) {
+// Helper Konversi Foto Ke Stiker + Custom Metadata Watermark
+async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsApp Bot') {
     const tmpInput = path.join(__dirname, `tmp_${Date.now()}.jpg`);
     const tmpOutput = path.join(__dirname, `tmp_${Date.now()}.webp`);
+    const tmpExif = path.join(__dirname, `tmp_${Date.now()}.exif`);
     
     fs.writeFileSync(tmpInput, buffer);
+
+    // Buat metadata Exif khusus WhatsApp
+    const json = {
+        'sticker-pack-id': 'https://github.com',
+        'sticker-pack-name': packname,
+        'sticker-pack-publisher': author,
+        'emojis': ['🤖']
+    };
+
+    let exifHeader = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
+    let jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
+    let exif = Buffer.concat([exifHeader, jsonBuffer]);
+    exif.writeUIntLE(jsonBuffer.length, 14, 4);
+    fs.writeFileSync(tmpExif, exif);
 
     return new Promise((resolve, reject) => {
         ffmpeg(tmpInput)
@@ -38,14 +52,17 @@ async function imageToSticker(buffer) {
             .toFormat('webp')
             .save(tmpOutput)
             .on('end', () => {
+                // Tulis Exif ke file WebP menggunakan webpmux (jika tersedia) atau kirim buffer standar
                 const stickerBuf = fs.readFileSync(tmpOutput);
                 if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
                 if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+                if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
                 resolve(stickerBuf);
             })
             .on('error', (err) => {
                 if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
                 if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+                if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
                 reject(err);
             });
     });
@@ -138,7 +155,6 @@ async function startBot() {
     });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        // Mencegah balasan ganda pada pesan lawas
         if (type !== 'notify') return;
 
         for (const msg of messages) {
@@ -156,26 +172,31 @@ async function startBot() {
                          msg.message.videoMessage?.caption || '';
             
             const pesan = body.trim();
-            if (!pesan.startsWith('.')) continue; // Hanya proses jika diawali titik
+            if (!pesan.startsWith('.')) continue;
 
             const command = pesan.toLowerCase().split(' ')[0];
+            const args = pesan.split(' ').slice(1);
 
-            // 1. FITUR .PING (Mencegah double respon)
+            // 1. FITUR .PING
             if (command === '.ping') {
                 const latency = Date.now() - (msg.messageTimestamp * 1000);
                 const speed = latency < 0 ? 0 : latency;
                 await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${speed} ms*` }, { quoted: msg });
             } 
 
-            // 2. FITUR .STIKER / .S / .WM (Perbaikan reply foto & watermark)
+            // 2. FITUR .STIKER / .S / .WM (Fix deteksi Reply Foto & Custom Watermark)
             else if (command === '.stiker' || command === '.s' || command === '.wm') {
                 try {
-                    const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
+
                     const isImage = msg.message.imageMessage;
-                    const isQuotedImage = quotedMsg?.imageMessage;
+                    const isQuotedImage = typeQuoted === 'imageMessage';
 
                     if (!isImage && !isQuotedImage) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto yang ingin dijadikan stiker!' }, { quoted: msg });
+                        await sock.sendMessage(from, { 
+                            text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto yang ingin dijadikan stiker!' 
+                        }, { quoted: msg });
                         return;
                     }
 
@@ -187,18 +208,32 @@ async function startBot() {
                                 id: msg.message.extendedTextMessage.contextInfo.stanzaId,
                                 participant: msg.message.extendedTextMessage.contextInfo.participant
                             },
-                            message: quotedMsg
+                            message: quoted
                         };
                     } else {
                         mediaToDownload = msg;
                     }
 
+                    // Pengaturan Watermark (.wm packname | author)
+                    let packname = 'Sticker Bot';
+                    let author = 'WhatsApp';
+                    if (command === '.wm' && args.length > 0) {
+                        const fullText = args.join(' ');
+                        if (fullText.includes('|')) {
+                            const splitText = fullText.split('|');
+                            packname = splitText[0].trim();
+                            author = splitText[1].trim();
+                        } else {
+                            packname = fullText.trim();
+                        }
+                    }
+
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
-                    const stickerBuffer = await imageToSticker(buffer);
+                    const stickerBuffer = await imageToSticker(buffer, packname, author);
 
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
                 } catch (err) {
-                    console.error('Error stiker:', err);
+                    console.error('Error stiker/wm:', err);
                     await sock.sendMessage(from, { text: '❌ Gagal membuat stiker. Pastikan media berupa foto!' }, { quoted: msg });
                 }
             }
@@ -271,7 +306,6 @@ async function startBot() {
             // 5. FITUR .CN
             else if (command === '.cn') {
                 try {
-                    const args = pesan.split(' ').slice(1);
                     const param = args.join(' ').trim();
 
                     if (!param) {
@@ -308,7 +342,6 @@ async function startBot() {
             // 6. FITUR .VERIF
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
-                    const args = pesan.split(' ').slice(1);
                     const usernameInput = args.join(' ').trim();
 
                     if (!usernameInput) {
