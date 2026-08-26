@@ -6,7 +6,7 @@ const cheerio = require('cheerio');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('children_process');
+const { exec } = require('child_process');
 
 // =============================================================
 // 1. LIST NOMOR IZIN KICK
