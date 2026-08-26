@@ -8,7 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
+// LIST NOMOR YANG DIIZINKAN (Ganti atau tambah nomor di dalam array ini)
 const listBolehKick = ['6281298697777'];
+const listBolehHidetag = ['6281298697777', '628xxxxxxxxxx']; // Tambahkan nomor lain di sini
 
 function formatNumber(num) {
     if (!num) return '0';
@@ -246,10 +248,18 @@ async function startBot() {
                 }
             }
 
-            // 3. FITUR .HIDETAG / .H
+            // 3. FITUR .HIDETAG / .H (HANYA UNTUK NOMOR TERDAFTAR ATAL NOMOR BOT SENDIRI)
             else if (command === '.hidetag' || command === '.h') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    return;
+                }
+
+                const isFromMe = msg.key.fromMe;
+                const punyaIzin = isFromMe || listBolehHidetag.includes(senderNumber);
+
+                if (!punyaIzin) {
+                    await sock.sendMessage(from, { text: '❌ Anda tidak memiliki izin untuk menggunakan perintah .hidetag!' }, { quoted: msg });
                     return;
                 }
 
