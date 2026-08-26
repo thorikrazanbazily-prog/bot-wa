@@ -11,6 +11,37 @@ const { exec } = require('child_process');
 const listBolehKick = ['6281298697777'];
 
 const listNickTikTok = [
+    "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞
+╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍ Thread Info ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+- Current UTC Time: 2026-08-26 23:29:16
+- User ID: 104082260275825001391
+- Request ID: 6fb5ed33-3bc3-4bb4-ac9d-d9b89b4f9a0c
+- Model: gemini-2.5-flash
+- Grounding: personal_context
+╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍ End Thread Info ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
+
+Perubahan logika pada fungsi `.wm` dan `imageToSticker` berikut memastikan bagian *author* (teks sebelah kanan titik) menjadi **"Bot WhatsApp"** secara otomatis.
+
+Jika mengetik `.wm beni`, hasilnya akan menjadi `beni • Bot WhatsApp`.
+
+---
+
+### **Kode Lengkap `index.js`**
+
+```javascript
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const ffmpeg = require('fluent-ffmpeg');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+
+const listBolehKick = ['6281298697777'];
+
+const listNickTikTok = [
     "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
     "C L O U D", "S H A D O W", "KGY", "Æ · Skyee",
     "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝙚",
@@ -23,7 +54,7 @@ function formatNumber(num) {
 }
 
 // Helper Konversi Foto / Stiker Ke Stiker Ber-Watermark Exif
-async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsApp') {
+async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot WhatsApp') {
     const tmpInput = path.join(__dirname, `tmp_${Date.now()}.jpg`);
     const tmpOutput = path.join(__dirname, `tmp_${Date.now()}.webp`);
     const tmpExif = path.join(__dirname, `tmp_${Date.now()}.exif`);
@@ -31,7 +62,7 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsAp
     
     fs.writeFileSync(tmpInput, buffer);
 
-    // Metadata Exif WhatsApp (Diubah ID-nya menjadi Bot WhatsApp)
+    // Metadata Exif WhatsApp
     const json = {
         'sticker-pack-id': 'Bot WhatsApp',
         'sticker-pack-name': packname,
@@ -54,7 +85,7 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsAp
             .toFormat('webp')
             .save(tmpOutput)
             .on('end', () => {
-                // Injeksi Exif Watermark menggunakan webpmux (package libwebp)
+                // Injeksi Exif Watermark menggunakan webpmux
                 exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
                     let finalBuf;
                     if (!err && fs.existsSync(tmpFinal)) {
@@ -211,7 +242,7 @@ async function startBot() {
 
                     if (!isImage && !isQuotedImage && !isSticker && !isQuotedSticker) {
                         await sock.sendMessage(from, { 
-                            text: '⚠️ Kirim foto/stiker atau reply foto/stiker dengan perintah:\n- *.stiker*\n- *.wm PackName | AuthorName*' 
+                            text: '⚠️ Kirim foto/stiker atau reply foto/stiker dengan perintah:\n- *.stiker*\n- *.wm NamaStiker*' 
                         }, { quoted: msg });
                         return;
                     }
@@ -231,17 +262,18 @@ async function startBot() {
                     }
 
                     let packname = 'Bot Stiker';
-                    let author = 'WhatsApp';
+                    let author = 'Bot WhatsApp';
 
                     if (command === '.wm') {
-                        const fullText = args.join(' ');
+                        const fullText = args.join(' ').trim();
                         if (fullText.includes('|')) {
                             const splitText = fullText.split('|');
                             packname = splitText[0].trim() || 'Bot Stiker';
-                            author = splitText[1].trim() || 'WhatsApp';
-                        } else if (fullText.trim()) {
-                            packname = fullText.trim();
-                            author = senderNumber;
+                            author = splitText[1].trim() || 'Bot WhatsApp';
+                        } else if (fullText) {
+                            // Jika mengetik ".wm beni", packname = "beni" dan author = "Bot WhatsApp"
+                            packname = fullText;
+                            author = 'Bot WhatsApp';
                         }
                     }
 
