@@ -8,9 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
-// LIST NOMOR YANG DIIZINKAN (Ganti atau tambah nomor di dalam array ini)
+// LIST NOMOR YANG DIIZINKAN
 const listBolehKick = ['6281298697777'];
-const listBolehHidetag = ['6281298697777', '628xxxxxxxxxx']; // Tambahkan nomor lain di sini
+const listBolehHidetag = ['6281298697777'];
 
 function formatNumber(num) {
     if (!num) return '0';
@@ -248,7 +248,7 @@ async function startBot() {
                 }
             }
 
-            // 3. FITUR .HIDETAG / .H (HANYA UNTUK NOMOR TERDAFTAR ATAL NOMOR BOT SENDIRI)
+            // 3. FITUR .HIDETAG / .H
             else if (command === '.hidetag' || command === '.h') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -271,14 +271,12 @@ async function startBot() {
                     const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const teksPesan = args.join(' ').trim();
 
-                    // Jika pengguna melakukan reply pesan
                     if (quotedMsg) {
                         await sock.sendMessage(from, { 
                             forward: { key: msg.message.extendedTextMessage.contextInfo.stanzaId, message: quotedMsg, remoteJid: from },
                             mentions: mentions
                         });
                     } else {
-                        // Kirim teks langsung dengan penandaan tersembunyi
                         const teksKirim = teksPesan ? teksPesan : '📢 *PENGUMUMAN*';
                         await sock.sendMessage(from, { 
                             text: teksKirim, 
@@ -356,13 +354,13 @@ async function startBot() {
                 }
             }
 
-            // 6. FITUR .VERIF
+            // 6. FITUR .VERIF (VERIFIKASI AKUN TIKTOK LENGKAP)
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const usernameInput = args.join(' ').trim();
 
                     if (!usernameInput) {
-                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` }, { quoted: msg });
+                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif username_tiktok*` }, { quoted: msg });
                         return;
                     }
 
