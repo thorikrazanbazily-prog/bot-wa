@@ -13,7 +13,7 @@ const listBolehKick = ['6281298697777'];
 const listNickTikTok = [
     "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
     "C L O U D", "S H A D O W", "KGY", "Æ · Skyee",
-    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝑒",
+    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝙚",
     "✦ · N o v a", " 𝙮 𝙤"
 ];
 
@@ -31,9 +31,9 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsAp
     
     fs.writeFileSync(tmpInput, buffer);
 
-    // Struktur Metadata Exif WhatsApp
+    // Metadata Exif WhatsApp (Diubah ID-nya menjadi Bot WhatsApp)
     const json = {
-        'sticker-pack-id': 'https://github.com',
+        'sticker-pack-id': 'Bot WhatsApp',
         'sticker-pack-name': packname,
         'sticker-pack-publisher': author,
         'emojis': ['🤖']
@@ -49,12 +49,12 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsAp
         ffmpeg(tmpInput)
             .outputOptions([
                 '-vcodec libwebp',
-                '-vf scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=0x00000000'
+                '-vf scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-ih)/2:(oh-ih)/2:color=0x00000000'
             ])
             .toFormat('webp')
             .save(tmpOutput)
             .on('end', () => {
-                // Injeksi Exif Watermark menggunakan webpmux
+                // Injeksi Exif Watermark menggunakan webpmux (package libwebp)
                 exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
                     let finalBuf;
                     if (!err && fs.existsSync(tmpFinal)) {
@@ -403,3 +403,4 @@ async function startBot() {
 }
 
 startBot();
+
