@@ -8,31 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 
-// =============================================================
-// 1. LIST NOMOR IZIN KICK
-// =============================================================
-const listBolehKick = [
-    '6281298697777'
-];
+const listBolehKick = ['6281298697777'];
 
-// =============================================================
-// 2. DAFTAR NICKNAME TIKTOK
-// =============================================================
 const listNickTikTok = [
-    "𝙕 𝙚 𝙣 𝙣",
-    "𝐕 𝐞 𝐱 𝐱",
-    "𝙆 𝙖 𝙞 𝙯 𝙤",
-    "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
-    "C L O U D",
-    "S H A D O W",
-    "KGY",
-    "Æ · Skyee",
-    "々 · A l e x",
-    "V a n x y z",
-    "𝕯 𝖆 𝖗 𝖐",
-    "𝙁 𝙡 𝙖 𝙢 𝑒",
-    "✦ · N o v a",
-    "𝙆 𝙮 𝙤"
+    "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
+    "C L O U D", "S H A D O W", "KGY", "Æ · Skyee",
+    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝑒",
+    "✦ · N o v a", "𝙆 𝙮 𝙤"
 ];
 
 function formatNumber(num) {
@@ -73,7 +55,6 @@ async function imageToSticker(buffer) {
 async function getTikTokProfile(username) {
     const cleanUser = username.replace('@', '').trim();
 
-    // Server 1: TikTok Web HTML
     try {
         const response = await axios.get(`https://www.tiktok.com/@${cleanUser}`, {
             headers: {
@@ -108,7 +89,6 @@ async function getTikTokProfile(username) {
         }
     } catch (e) {}
 
-    // Server 2: API Backup
     try {
         const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 8000 });
         if (res.data && res.data.result) {
@@ -158,6 +138,7 @@ async function startBot() {
     });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        // Mencegah balasan ganda pada pesan lawas
         if (type !== 'notify') return;
 
         for (const msg of messages) {
@@ -171,18 +152,58 @@ async function startBot() {
 
             const body = msg.message.conversation || 
                          msg.message.extendedTextMessage?.text || 
-                         msg.message.imageMessage?.caption || '';
+                         msg.message.imageMessage?.caption || 
+                         msg.message.videoMessage?.caption || '';
+            
             const pesan = body.trim();
+            if (!pesan.startsWith('.')) continue; // Hanya proses jika diawali titik
+
             const command = pesan.toLowerCase().split(' ')[0];
 
-            // .ping
+            // 1. FITUR .PING (Mencegah double respon)
             if (command === '.ping') {
-                const start = Date.now();
-                const latency = Date.now() - start;
-                await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` }, { quoted: msg });
+                const latency = Date.now() - (msg.messageTimestamp * 1000);
+                const speed = latency < 0 ? 0 : latency;
+                await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${speed} ms*` }, { quoted: msg });
             } 
 
-            // .listmem
+            // 2. FITUR .STIKER / .S / .WM (Perbaikan reply foto & watermark)
+            else if (command === '.stiker' || command === '.s' || command === '.wm') {
+                try {
+                    const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const isImage = msg.message.imageMessage;
+                    const isQuotedImage = quotedMsg?.imageMessage;
+
+                    if (!isImage && !isQuotedImage) {
+                        await sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto yang ingin dijadikan stiker!' }, { quoted: msg });
+                        return;
+                    }
+
+                    let mediaToDownload;
+                    if (isQuotedImage) {
+                        mediaToDownload = {
+                            key: {
+                                remoteJid: from,
+                                id: msg.message.extendedTextMessage.contextInfo.stanzaId,
+                                participant: msg.message.extendedTextMessage.contextInfo.participant
+                            },
+                            message: quotedMsg
+                        };
+                    } else {
+                        mediaToDownload = msg;
+                    }
+
+                    const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
+                    const stickerBuffer = await imageToSticker(buffer);
+
+                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                } catch (err) {
+                    console.error('Error stiker:', err);
+                    await sock.sendMessage(from, { text: '❌ Gagal membuat stiker. Pastikan media berupa foto!' }, { quoted: msg });
+                }
+            }
+
+            // 3. FITUR .LISTMEM
             else if (command === '.listmem') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -206,35 +227,7 @@ async function startBot() {
                 }
             }
 
-            // .stiker / .s / .wm
-            else if (command === '.stiker' || command === '.s' || command === '.wm') {
-                try {
-                    const typeMsg = Object.keys(msg.message)[0];
-                    const isImage = typeMsg === 'imageMessage';
-                    const isQuotedImage = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
-
-                    if (!isImage && !isQuotedImage) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto!' }, { quoted: msg });
-                        return;
-                    }
-
-                    let targetMsg = msg;
-                    if (isQuotedImage) {
-                        targetMsg = {
-                            key: { remoteJid: from, id: msg.message.extendedTextMessage.contextInfo.stanzaId, participant: msg.message.extendedTextMessage.contextInfo.participant },
-                            message: msg.message.extendedTextMessage.contextInfo.quotedMessage
-                        };
-                    }
-
-                    const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
-                    const stickerBuffer = await imageToSticker(buffer);
-                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error stiker:', err);
-                }
-            }
-
-            // .kick
+            // 4. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -275,7 +268,7 @@ async function startBot() {
                 }
             }
 
-            // .cn
+            // 5. FITUR .CN
             else if (command === '.cn') {
                 try {
                     const args = pesan.split(' ').slice(1);
@@ -312,7 +305,7 @@ async function startBot() {
                 }
             }
 
-            // .verif
+            // 6. FITUR .VERIF
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const args = pesan.split(' ').slice(1);
