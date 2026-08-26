@@ -10,41 +10,6 @@ const { exec } = require('child_process');
 
 const listBolehKick = ['6281298697777'];
 
-const listNickTikTok = [
-    "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞
-╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍ Thread Info ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
-- Current UTC Time: 2026-08-26 23:29:16
-- User ID: 104082260275825001391
-- Request ID: 6fb5ed33-3bc3-4bb4-ac9d-d9b89b4f9a0c
-- Model: gemini-2.5-flash
-- Grounding: personal_context
-╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍ End Thread Info ╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍
-
-Perubahan logika pada fungsi `.wm` dan `imageToSticker` berikut memastikan bagian *author* (teks sebelah kanan titik) menjadi **"Bot WhatsApp"** secara otomatis.
-
-Jika mengetik `.wm beni`, hasilnya akan menjadi `beni • Bot WhatsApp`.
-
----
-
-### **Kode Lengkap `index.js`**
-
-```javascript
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const pino = require('pino');
-const axios = require('axios');
-const cheerio = require('cheerio');
-const ffmpeg = require('fluent-ffmpeg');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-
-const listBolehKick = ['6281298697777'];
-
-const listNickTikTok = [
-    "tes"
-];
-
 function formatNumber(num) {
     if (!num) return '0';
     return Number(num).toLocaleString('id-ID');
@@ -268,7 +233,6 @@ async function startBot() {
                             packname = splitText[0].trim() || 'Bot Stiker';
                             author = splitText[1].trim() || 'Bot WhatsApp';
                         } else if (fullText) {
-                            // Jika mengetik ".wm beni", packname = "beni" dan author = "Bot WhatsApp"
                             packname = fullText;
                             author = 'Bot WhatsApp';
                         }
@@ -349,43 +313,7 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .CN
-            else if (command === '.cn') {
-                try {
-                    const param = args.join(' ').trim();
-
-                    if (!param) {
-                        let teks = `CN (copy aja)\n`;
-                        for (let i = 0; i < listNickTikTok.length; i++) {
-                            teks += `${i + 1}. ${listNickTikTok[i]}\n`;
-                        }
-                        teks += `\npilih salah satu aja ya (contoh: .cn 1)`;
-                        await sock.sendMessage(from, { text: teks }, { quoted: msg });
-                        return;
-                    }
-
-                    let selectedNick = '';
-                    const nickIndex = parseInt(param) - 1;
-
-                    if (!isNaN(nickIndex) && listNickTikTok[nickIndex]) {
-                        selectedNick = listNickTikTok[nickIndex];
-                    } else {
-                        const foundNick = listNickTikTok.find(n => n.toLowerCase().includes(param.toLowerCase()));
-                        if (foundNick) selectedNick = foundNick;
-                    }
-
-                    if (selectedNick) {
-                        await sock.sendMessage(from, { text: selectedNick }, { quoted: msg });
-                    } else {
-                        await sock.sendMessage(from, { text: `❌ Nickname nomor *"${param}"* tidak ditemukan!` }, { quoted: msg });
-                    }
-
-                } catch (err) {
-                    console.error('Error .cn:', err);
-                }
-            }
-
-            // 6. FITUR .VERIF
+            // 5. FITUR .VERIF
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const usernameInput = args.join(' ').trim();
