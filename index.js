@@ -2,7 +2,6 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, download
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const axios = require('axios');
-const cheerio = require('cheerio');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const path = require('path');
@@ -75,56 +74,45 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
     });
 }
 
-// Scraper TikTok Multi-Server
+// Fungsi Stalk TikTok Menggunakan API Stabil
 async function getTikTokProfile(username) {
     const cleanUser = username.replace('@', '').trim();
 
+    // Percobaan Server API 1 (Vreden API)
     try {
-        const response = await axios.get(`https://www.tiktok.com/@${cleanUser}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
-            },
-            timeout: 8000
-        });
-
-        const $ = cheerio.load(response.data);
-        const jsonScript = $('#__UNIVERSAL_DATA_FOR_REHYDRATION__').html();
-
-        if (jsonScript) {
-            const parsedData = JSON.parse(jsonScript);
-            const userDetail = parsedData['__DEFAULT_SCOPE__']?.['webapp.user-detail'];
-
-            if (userDetail && userDetail.userInfo) {
-                const u = userDetail.userInfo.user;
-                const s = userDetail.userInfo.stats;
-
-                return {
-                    status: true,
-                    nickname: u.nickname || cleanUser,
-                    username: u.uniqueId || cleanUser,
-                    avatar: u.avatarLarger || u.avatarMedium || u.avatarThumb,
-                    followers: formatNumber(s.followerCount),
-                    videoCount: formatNumber(s.videoCount),
-                    bio: u.signature || 'Tidak ada bio',
-                    createDate: u.createTime ? new Date(u.createTime * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Terverifikasi Aktif'
-                };
-            }
-        }
-    } catch (e) {}
-
-    try {
-        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 8000 });
-        if (res.data && res.data.result) {
+        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${encodeURIComponent(cleanUser)}`, { timeout: 10000 });
+        if (res.data && (res.data.status === 200 || res.data.result)) {
             const data = res.data.result;
             return {
                 status: true,
                 nickname: data.nickname || cleanUser,
                 username: data.username || cleanUser,
-                avatar: data.avatar || data.profile,
-                followers: formatNumber(data.followers || data.follower),
-                videoCount: formatNumber(data.video || data.videos),
+                avatar: data.avatar || data.profile || data.avatarLarger,
+                followers: formatNumber(data.followers || data.followerCount || data.follower),
+                videoCount: formatNumber(data.video || data.videoCount || data.videos),
                 bio: data.bio || data.signature || 'Tidak ada bio',
+                createDate: 'Terverifikasi System'
+            };
+        }
+    } catch (e) {}
+
+    // Percobaan Server API 2 (Fallback API Alternatif)
+    try {
+        const res2 = await axios.get(`https://tikwm.com/api/user/info?unique_id=${encodeURIComponent(cleanUser)}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            timeout: 10000
+        });
+        if (res2.data && res2.data.code === 0 && res2.data.data) {
+            const userInfo = res2.data.data.user;
+            const stats = res2.data.data.stats;
+            return {
+                status: true,
+                nickname: userInfo.nickname || cleanUser,
+                username: userInfo.unique_id || cleanUser,
+                avatar: userInfo.avatar_larger || userInfo.avatar_medium || userInfo.avatar_thumb,
+                followers: formatNumber(stats.followerCount),
+                videoCount: formatNumber(stats.videoCount),
+                bio: userInfo.signature || 'Tidak ada bio',
                 createDate: 'Terverifikasi System'
             };
         }
