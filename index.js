@@ -1,0 +1,407 @@
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal');
+const pino = require('pino');
+const { Sticker, StickerTypes } = require('wa-sticker-formatter');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+// =============================================================
+// 1. LIST NOMOR IZIN KICK (Hanya Angka Murni)
+// =============================================================
+const listBolehKick = [
+    '6281298697777'
+];
+
+// =============================================================
+// 2. DAFTAR NICKNAME TIKTOK
+// =============================================================
+const listNickTikTok = [
+    "𝙕 𝙚 𝙣 𝙣",
+    "𝐕 𝐞 𝐱 𝐱",
+    "𝙆 𝙖 𝙞 𝙯 𝙤",
+    "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
+    "C L O U D",
+    "S H A D O W",
+    "KGY",
+    "Æ · Skyee",
+    "々 · A l e x",
+    "V a n x y z",
+    "𝕯 𝖆 𝖗 𝖐",
+    "𝙁 𝙡 𝙖 𝙢 𝑒",
+    "✦ · N o v a",
+    "𝙆 𝙮 𝙤"
+];
+
+// Fungsi Helper Format Angka
+function formatNumber(num) {
+    if (!num) return '0';
+    return Number(num).toLocaleString('id-ID');
+}
+
+// Fungsi Scraper TikTok Direct Bypass
+async function getTikTokProfile(username) {
+    const cleanUser = username.replace('@', '').trim();
+
+    // SERVER 1: Direct Web Scraping (TikTok Web HTML Data)
+    try {
+        const url = `https://www.tiktok.com/@${cleanUser}`;
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
+            },
+            timeout: 10000
+        });
+
+        const $ = cheerio.load(response.data);
+        const jsonScript = $('#__UNIVERSAL_DATA_FOR_REHYDRATION__').html();
+
+        if (jsonScript) {
+            const parsedData = JSON.parse(jsonScript);
+            const userDetail = parsedData['__DEFAULT_SCOPE__']?.['webapp.user-detail'];
+
+            if (userDetail && userDetail.userInfo) {
+                const u = userDetail.userInfo.user;
+                const s = userDetail.userInfo.stats;
+
+                return {
+                    status: true,
+                    nickname: u.nickname || cleanUser,
+                    username: u.uniqueId || cleanUser,
+                    avatar: u.avatarLarger || u.avatarMedium || u.avatarThumb,
+                    followers: formatNumber(s.followerCount),
+                    videoCount: formatNumber(s.videoCount),
+                    bio: u.signature || 'Tidak ada bio',
+                    createDate: u.createTime ? new Date(u.createTime * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Terverifikasi Aktif'
+                };
+            }
+        }
+    } catch (e) {
+        // Lanjut ke API Cadangan
+    }
+
+    // SERVER 2: API Engine Backup (Tiktod)
+    try {
+        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 10000 });
+        if (res.data && res.data.result) {
+            const data = res.data.result;
+            return {
+                status: true,
+                nickname: data.nickname || data.user || cleanUser,
+                username: data.username || cleanUser,
+                avatar: data.avatar || data.profile,
+                followers: formatNumber(data.followers || data.follower),
+                videoCount: formatNumber(data.video || data.videos),
+                bio: data.bio || data.signature || 'Tidak ada bio',
+                createDate: 'Terverifikasi System'
+            };
+        }
+    } catch (e) {
+        // Gagal
+    }
+
+    return { status: false };
+}
+
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+
+    const sock = makeWASocket({
+        auth: state,
+        logger: pino({ level: 'silent' })
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            console.log('\nScan QR Code di bawah menggunakan WhatsApp:');
+            qrcode.generate(qr, { small: true });
+        }
+
+        if (connection === 'close') {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log('Koneksi terputus. Menghubungkan ulang...', shouldReconnect);
+            if (shouldReconnect) {
+                startBot();
+            }
+        } else if (connection === 'open') {
+            console.log('✅ Bot WhatsApp berhasil terhubung!');
+        }
+    });
+
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
+
+        for (const msg of messages) {
+            if (!msg.message) continue;
+
+            const from = msg.key.remoteJid;
+            const isGroup = from.endsWith('@g.us');
+
+            const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
+            const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
+
+            const body = msg.message.conversation || 
+                         msg.message.extendedTextMessage?.text || 
+                         msg.message.imageMessage?.caption || '';
+            const pesan = body.trim();
+            const command = pesan.toLowerCase().split(' ')[0];
+
+            // FITUR 1: .ping
+            if (command === '.ping') {
+                const start = Date.now();
+                const latency = Date.now() - start;
+
+                await sock.sendMessage(from, { 
+                    text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` 
+                }, { quoted: msg });
+            } 
+
+            // FITUR 2: Sapaan
+            else if (command === 'halo' || command === 'hi' || command === '.hi') {
+                await sock.sendMessage(from, { 
+                    text: 'hai ganteng aku muach' 
+                }, { quoted: msg });
+            }
+
+            // FITUR 3: .listmem
+            else if (command === '.listmem') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    return;
+                }
+                try {
+                    const groupMetadata = await sock.groupMetadata(from);
+                    const participants = groupMetadata.participants;
+
+                    let teksBalas = `📋 *DAFTAR MEMBER GRUP*\n👥 Total: *${participants.length} Member*\n\n`;
+                    let mentions = [];
+
+                    for (let mem of participants) {
+                        teksBalas += `@${mem.id.split('@')[0]}\n`;
+                        mentions.push(mem.id);
+                    }
+
+                    await sock.sendMessage(from, { text: teksBalas, mentions: mentions }, { quoted: msg });
+                } catch (err) {
+                    console.error('Error listmem:', err);
+                }
+            }
+
+            // FITUR 4: .stiker
+            else if (command === '.stiker' || command === '.s') {
+                try {
+                    const typeMsg = Object.keys(msg.message)[0];
+                    const isImage = typeMsg === 'imageMessage';
+                    const isQuotedImage = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+
+                    if (!isImage && !isQuotedImage) {
+                        await sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto!' }, { quoted: msg });
+                        return;
+                    }
+
+                    let targetMsg = msg;
+                    if (isQuotedImage) {
+                        targetMsg = {
+                            key: { remoteJid: from, id: msg.message.extendedTextMessage.contextInfo.stanzaId, participant: msg.message.extendedTextMessage.contextInfo.participant },
+                            message: msg.message.extendedTextMessage.contextInfo.quotedMessage
+                        };
+                    }
+
+                    const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
+                    const sticker = new Sticker(buffer, { pack: 'My Bot Sticker', author: 'Bot WhatsApp', type: StickerTypes.FULL, quality: 70 });
+                    const stickerBuffer = await sticker.toBuffer();
+                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                } catch (err) {
+                    console.error('Error stiker:', err);
+                }
+            }
+
+            // FITUR 5: .wm
+            else if (command === '.wm') {
+                try {
+                    const typeMsg = Object.keys(msg.message)[0];
+                    const isImage = typeMsg === 'imageMessage';
+                    const isQuotedImage = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+                    const isQuotedSticker = typeMsg === 'extendedTextMessage' && msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.stickerMessage;
+
+                    if (!isImage && !isQuotedImage && !isQuotedSticker) {
+                        await sock.sendMessage(from, { text: '⚠️ Kirim/reply foto/stiker dengan format:\n*.wm NamaPack|NamaAuthor*' }, { quoted: msg });
+                        return;
+                    }
+
+                    const textWm = pesan.slice(3).trim();
+                    const packName = textWm.includes('|') ? textWm.split('|')[0] : (textWm || 'My Bot Sticker');
+                    const authorName = textWm.includes('|') ? textWm.split('|')[1] : 'Bot WhatsApp';
+
+                    let targetMsg = msg;
+                    if (isQuotedImage || isQuotedSticker) {
+                        targetMsg = {
+                            key: { remoteJid: from, id: msg.message.extendedTextMessage.contextInfo.stanzaId, participant: msg.message.extendedTextMessage.contextInfo.participant },
+                            message: msg.message.extendedTextMessage.contextInfo.quotedMessage
+                        };
+                    }
+
+                    const buffer = await downloadMediaMessage(targetMsg, 'buffer', {});
+                    const sticker = new Sticker(buffer, { pack: packName, author: authorName, type: StickerTypes.FULL, quality: 70 });
+                    const stickerBuffer = await sticker.toBuffer();
+                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                } catch (err) {
+                    console.error('Error .wm:', err);
+                }
+            }
+
+            // FITUR 6: .kick
+            else if (command === '.kick') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    return;
+                }
+
+                const isFromMe = msg.key.fromMe;
+                const punyaIzin = isFromMe || listBolehKick.includes(senderNumber);
+
+                if (!punyaIzin) {
+                    await sock.sendMessage(from, { 
+                        text: '❌ Anda tidak memiliki izin untuk menggunakan perintah .kick!' 
+                    }, { quoted: msg });
+                    return;
+                }
+
+                try {
+                    let targetUser = '';
+
+                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                    const mentionedJid = contextInfo?.mentionedJid;
+                    const quotedParticipant = contextInfo?.participant;
+
+                    if (mentionedJid && mentionedJid.length > 0) {
+                        targetUser = mentionedJid[0];
+                    } else if (quotedParticipant) {
+                        targetUser = quotedParticipant;
+                    }
+
+                    if (!targetUser) {
+                        await sock.sendMessage(from, { 
+                            text: '⚠️ Tag orang yang ingin di-kick atau reply pesannya!\n\nContoh:\n*.kick @user*' 
+                        }, { quoted: msg });
+                        return;
+                    }
+
+                    await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
+
+                    await sock.sendMessage(from, { 
+                        text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup!`,
+                        mentions: [targetUser]
+                    }, { quoted: msg });
+
+                } catch (err) {
+                    console.error('Error kick:', err);
+                    await sock.sendMessage(from, { 
+                        text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' 
+                    }, { quoted: msg });
+                }
+            }
+
+            // FITUR 7: .cn
+            else if (command === '.cn') {
+                try {
+                    const args = pesan.split(' ').slice(1);
+                    const param = args.join(' ').trim();
+
+                    if (!param) {
+                        let teks = `CN (copy aja)\n`;
+
+                        for (let i = 0; i < listNickTikTok.length; i++) {
+                            teks += `${i + 1}. ${listNickTikTok[i]}\n`;
+                        }
+
+                        teks += `\npilih salah satu aja ya (contoh: .cn 1)`;
+
+                        await sock.sendMessage(from, { text: teks }, { quoted: msg });
+                        return;
+                    }
+
+                    let selectedNick = '';
+                    const nickIndex = parseInt(param) - 1;
+
+                    if (!isNaN(nickIndex) && listNickTikTok[nickIndex]) {
+                        selectedNick = listNickTikTok[nickIndex];
+                    } else {
+                        const foundNick = listNickTikTok.find(n => n.toLowerCase().includes(param.toLowerCase()));
+                        if (foundNick) {
+                            selectedNick = foundNick;
+                        }
+                    }
+
+                    if (selectedNick) {
+                        await sock.sendMessage(from, { 
+                            text: selectedNick 
+                        }, { quoted: msg });
+                    } else {
+                        await sock.sendMessage(from, { 
+                            text: `❌ Nickname nomor *"${param}"* tidak ditemukan!` 
+                        }, { quoted: msg });
+                    }
+
+                } catch (err) {
+                    console.error('Error .cn:', err);
+                }
+            }
+
+            // FITUR 8: .verif (Scraping Langsung Ke Server TikTok)
+            else if (command === '.verif' || command === '.verifikasi') {
+                try {
+                    const args = pesan.split(' ').slice(1);
+                    const usernameInput = args.join(' ').trim();
+
+                    if (!usernameInput) {
+                        await sock.sendMessage(from, { 
+                            text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` 
+                        }, { quoted: msg });
+                        return;
+                    }
+
+                    const cleanUsername = usernameInput.replace('@', '');
+                    await sock.sendMessage(from, { text: '⏳ *Sedang memverifikasi data akun TikTok...*' }, { quoted: msg });
+
+                    const profile = await getTikTokProfile(cleanUsername);
+
+                    if (profile.status) {
+                        let caption = `✅ *VERIFIKASI AKUN TIKTOK BERHASIL*\n\n`;
+                        caption += `📛 *Display Name:* ${profile.nickname}\n`;
+                        caption += `🆔 *Username:* @${profile.username}\n`;
+                        caption += `👥 *Followers:* ${profile.followers}\n`;
+                        caption += `🎬 *Total Video:* ${profile.videoCount}\n`;
+                        caption += `📅 *Akun Dibuat:* ${profile.createDate}\n`;
+                        caption += `📝 *Bio:* ${profile.bio}\n\n`;
+                        caption += `👤 *Diverifikasi Oleh:* @${senderNumber}\n`;
+                        caption += `✨ Status: *AKUN RESMI TERVERIFIKASI*`;
+
+                        await sock.sendMessage(from, { 
+                            image: { url: profile.avatar },
+                            caption: caption,
+                            mentions: [rawSender]
+                        }, { quoted: msg });
+                    } else {
+                        await sock.sendMessage(from, { 
+                            text: `❌ *Gagal mengambil data akun TikTok "${cleanUsername}".*\nPastikan username benar dan akun tidak di-private.` 
+                        }, { quoted: msg });
+                    }
+
+                } catch (err) {
+                    console.error('Error verif:', err);
+                    await sock.sendMessage(from, { 
+                        text: '❌ Terjadi kesalahan sistem saat verifikasi.' 
+                    }, { quoted: msg });
+                }
+            }
+        }
+    });
+}
+
+startBot();
