@@ -25,7 +25,6 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
     
     fs.writeFileSync(tmpInput, buffer);
 
-    // Metadata Exif WhatsApp
     const json = {
         'sticker-pack-id': 'Bot WhatsApp',
         'sticker-pack-name': packname,
@@ -74,49 +73,48 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
     });
 }
 
-// Fungsi Stalk TikTok Menggunakan API Stabil
-async function getTikTokProfile(username) {
-    const cleanUser = username.replace('@', '').trim();
-
-    // Percobaan Server API 1 (Vreden API)
+// FUNGSI CEK TIKTOK MENGGUNAKAN API.VREDEN.WEB.ID (DENGAN FALLBACK FAILSAFE)
+async function cekTiktok(username) {
     try {
-        const res = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${encodeURIComponent(cleanUser)}`, { timeout: 10000 });
-        if (res.data && (res.data.status === 200 || res.data.result)) {
-            const data = res.data.result;
+        const cleanUser = encodeURIComponent(username.replace('@', '').trim());
+        const response = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 10000 });
+
+        if (response.data && response.data.result) {
+            const result = response.data.result;
             return {
                 status: true,
-                nickname: data.nickname || cleanUser,
-                username: data.username || cleanUser,
-                avatar: data.avatar || data.profile || data.avatarLarger,
-                followers: formatNumber(data.followers || data.followerCount || data.follower),
-                videoCount: formatNumber(data.video || data.videoCount || data.videos),
-                bio: data.bio || data.signature || 'Tidak ada bio',
-                createDate: 'Terverifikasi System'
+                nickname: result.nickname || username,
+                username: result.username || username,
+                avatar: result.avatar || result.profile || result.avatarLarger,
+                followers: formatNumber(result.followers || result.follower || result.followerCount),
+                videoCount: formatNumber(result.video || result.videos || result.videoCount),
+                bio: result.bio || result.signature || 'Tidak ada bio'
             };
         }
-    } catch (e) {}
+    } catch (error) {
+        console.error('Gagal mengambil data via Vreden API:', error.message);
+    }
 
-    // Percobaan Server API 2 (Fallback API Alternatif)
+    // Fallback Cadangan (Jika Vreden API Bermasalah)
     try {
-        const res2 = await axios.get(`https://tikwm.com/api/user/info?unique_id=${encodeURIComponent(cleanUser)}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-            timeout: 10000
-        });
+        const cleanUser = encodeURIComponent(username.replace('@', '').trim());
+        const res2 = await axios.get(`https://tikwm.com/api/user/info?unique_id=${cleanUser}`, { timeout: 10000 });
         if (res2.data && res2.data.code === 0 && res2.data.data) {
-            const userInfo = res2.data.data.user;
-            const stats = res2.data.data.stats;
+            const u = res2.data.data.user;
+            const s = res2.data.data.stats;
             return {
                 status: true,
-                nickname: userInfo.nickname || cleanUser,
-                username: userInfo.unique_id || cleanUser,
-                avatar: userInfo.avatar_larger || userInfo.avatar_medium || userInfo.avatar_thumb,
-                followers: formatNumber(stats.followerCount),
-                videoCount: formatNumber(stats.videoCount),
-                bio: userInfo.signature || 'Tidak ada bio',
-                createDate: 'Terverifikasi System'
+                nickname: u.nickname || username,
+                username: u.unique_id || username,
+                avatar: u.avatar_larger || u.avatar_medium,
+                followers: formatNumber(s.followerCount),
+                videoCount: formatNumber(s.videoCount),
+                bio: u.signature || 'Tidak ada bio'
             };
         }
-    } catch (e) {}
+    } catch (err) {
+        console.error('Gagal mengambil data via TikWM API:', err.message);
+    }
 
     return { status: false };
 }
@@ -342,40 +340,45 @@ async function startBot() {
                 }
             }
 
-            // 6. FITUR .VERIF (VERIFIKASI AKUN TIKTOK LENGKAP)
+            // 6. FITUR .VERIF (INTEGRASI DENGAN CEKTIKTOK)
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const usernameInput = args.join(' ').trim();
 
                     if (!usernameInput) {
-                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif username_tiktok*` }, { quoted: msg });
+                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` }, { quoted: msg });
                         return;
                     }
 
-                    const cleanUsername = usernameInput.replace('@', '');
                     await sock.sendMessage(from, { text: '⏳ *Sedang memverifikasi data akun TikTok...*' }, { quoted: msg });
 
-                    const profile = await getTikTokProfile(cleanUsername);
+                    const dataTikTok = await cekTiktok(usernameInput);
 
-                    if (profile.status) {
+                    if (dataTikTok.status) {
                         let caption = `✅ *VERIFIKASI AKUN TIKTOK BERHASIL*\n\n`;
-                        caption += `📛 *Display Name:* ${profile.nickname}\n`;
-                        caption += `🆔 *Username:* @${profile.username}\n`;
-                        caption += `👥 *Followers:* ${profile.followers}\n`;
-                        caption += `🎬 *Total Video:* ${profile.videoCount}\n`;
-                        caption += `📅 *Akun Dibuat:* ${profile.createDate}\n`;
-                        caption += `📝 *Bio:* ${profile.bio}\n\n`;
+                        caption += `📛 *Display Name:* ${dataTikTok.nickname}\n`;
+                        caption += `🆔 *Username:* @${dataTikTok.username}\n`;
+                        caption += `👥 *Followers:* ${dataTikTok.followers}\n`;
+                        caption += `🎬 *Total Video:* ${dataTikTok.videoCount}\n`;
+                        caption += `📝 *Bio:* ${dataTikTok.bio}\n\n`;
                         caption += `👤 *Diverifikasi Oleh:* @${senderNumber}\n`;
                         caption += `✨ Status: *AKUN RESMI TERVERIFIKASI*`;
 
-                        await sock.sendMessage(from, { 
-                            image: { url: profile.avatar },
-                            caption: caption,
-                            mentions: [rawSender]
-                        }, { quoted: msg });
+                        if (dataTikTok.avatar) {
+                            await sock.sendMessage(from, { 
+                                image: { url: dataTikTok.avatar },
+                                caption: caption,
+                                mentions: [rawSender]
+                            }, { quoted: msg });
+                        } else {
+                            await sock.sendMessage(from, { 
+                                text: caption,
+                                mentions: [rawSender]
+                            }, { quoted: msg });
+                        }
                     } else {
                         await sock.sendMessage(from, { 
-                            text: `❌ *Gagal mengambil data akun TikTok "${cleanUsername}".*\nPastikan username benar dan akun tidak di-private.` 
+                            text: `❌ *Gagal mengambil data akun TikTok "${usernameInput.replace('@', '')}".*\nPastikan username benar dan tidak di-private.` 
                         }, { quoted: msg });
                     }
 
