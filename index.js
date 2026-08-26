@@ -42,10 +42,7 @@ const { exec } = require('child_process');
 const listBolehKick = ['6281298697777'];
 
 const listNickTikTok = [
-    "𝙕 𝙚 𝙣 𝙣", "𝐕 𝐞 𝐱 𝐱", " 𝙖 𝙞 𝙯 𝙤", "𝕽 𝖞 𝖚 𝖟 𝖆 𝖐 𝖎",
-    "C L O U D", "S H A D O W", "KGY", "Æ · Skyee",
-    "々 · A l e x", "V a n x y z", "𝕯 𝖆 𝖗 𝖐", "𝙁 𝙡 𝙖 𝙢 𝙚",
-    "✦ · N o v a", " 𝙮 𝙤"
+    "tes"
 ];
 
 function formatNumber(num) {
