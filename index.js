@@ -47,7 +47,6 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
             .toFormat('webp')
             .save(tmpOutput)
             .on('end', () => {
-                // Injeksi Exif Watermark menggunakan webpmux
                 exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
                     let finalBuf;
                     if (!err && fs.existsSync(tmpFinal)) {
@@ -56,7 +55,6 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
                         finalBuf = fs.readFileSync(tmpOutput);
                     }
 
-                    // Bersihkan file sementara
                     if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
                     if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
                     if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
@@ -248,7 +246,42 @@ async function startBot() {
                 }
             }
 
-            // 3. FITUR .LISTMEM
+            // 3. FITUR .HIDETAG / .H
+            else if (command === '.hidetag' || command === '.h') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    return;
+                }
+
+                try {
+                    const groupMetadata = await sock.groupMetadata(from);
+                    const participants = groupMetadata.participants;
+                    const mentions = participants.map(mem => mem.id);
+
+                    const quotedMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const teksPesan = args.join(' ').trim();
+
+                    // Jika pengguna melakukan reply pesan
+                    if (quotedMsg) {
+                        await sock.sendMessage(from, { 
+                            forward: { key: msg.message.extendedTextMessage.contextInfo.stanzaId, message: quotedMsg, remoteJid: from },
+                            mentions: mentions
+                        });
+                    } else {
+                        // Kirim teks langsung dengan penandaan tersembunyi
+                        const teksKirim = teksPesan ? teksPesan : '📢 *PENGUMUMAN*';
+                        await sock.sendMessage(from, { 
+                            text: teksKirim, 
+                            mentions: mentions 
+                        }, { quoted: msg });
+                    }
+                } catch (err) {
+                    console.error('Error hidetag:', err);
+                    await sock.sendMessage(from, { text: '❌ Gagal menjalankan perintah hidetag.' }, { quoted: msg });
+                }
+            }
+
+            // 4. FITUR .LISTMEM
             else if (command === '.listmem') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -272,7 +305,7 @@ async function startBot() {
                 }
             }
 
-            // 4. FITUR .KICK
+            // 5. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
@@ -313,7 +346,7 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .VERIF
+            // 6. FITUR .VERIF
             else if (command === '.verif' || command === '.verifikasi') {
                 try {
                     const usernameInput = args.join(' ').trim();
@@ -360,4 +393,3 @@ async function startBot() {
 }
 
 startBot();
-
