@@ -341,7 +341,6 @@ else if (command === '.kick') {
                     await sock.sendMessage(from, { text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' }, { quoted: msg });
                 }
             }
-        }
     });
 }
 
