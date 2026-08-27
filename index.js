@@ -2,14 +2,13 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 
-// LIST NOMOR OWNER (Ganti dengan nomormu)
+// LIST NOMOR OWNER
 const ownerNumber = ['6281298697777'];
 
-// LIST NOMOR YANG DIIZINKAN MENGGUNAKAN FITUR .KICK (Selain Owner)
-// Masukkan nomor dengan awalan 62 tanpa tanda + atau spasi
+// LIST NOMOR TERPILIH YANG DIIZINKAN MENGGUNAKAN .KICK
 const allowedKickUsers = [
-    '6281298697777', // Contoh nomor 1 yang boleh kick
-    '6289876543210'  // Contoh nomor 2 yang boleh kick (tambahkan atau hapus sesuai kebutuhan)
+    '6281234567890',
+    '6289876543210'
 ];
 
 async function startBot() {
@@ -52,9 +51,9 @@ async function startBot() {
 
                 const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
                 const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
+                
+                // Status Akses Pengirim
                 const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
-
-                // Pengecekan apakah pengirim ada di daftar yang diizinkan menggunakan kick
                 const isAllowedKick = allowedKickUsers.includes(senderNumber);
 
                 const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
@@ -65,7 +64,7 @@ async function startBot() {
                 const args = pesan.split(' ').slice(1);
 
                 // ==========================================
-                // FITUR .KICK (Hanya User Pilihan, Admin, & Owner)
+                // FITUR .KICK (Khusus User Terpilih & Owner)
                 // ==========================================
                 if (command === '.kick') {
                     if (!isGroup) {
@@ -73,22 +72,26 @@ async function startBot() {
                         return;
                     }
 
-                    // Validasi: Hanya Owner, atau User dalam daftar izin, atau Admin Grup yang boleh pakai
-                    const groupMetadata = await sock.groupMetadata(from);
-                    const participants = groupMetadata.participants;
-                    
-                    const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
-                    const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
-
-                    if (!isOwner && !isAllowedKick && !isAdmin) {
-                        await sock.sendMessage(from, { text: '❌ Maaf, kamu tidak memiliki izin untuk menggunakan perintah ini!' }, { quoted: msg });
+                    // 1. Cek Hak Akses Pengirim Pesan
+                    if (!isOwner && !isAllowedKick) {
+                        await sock.sendMessage(from, { text: '❌ Maaf, kamu tidak memiliki izin khusus untuk menggunakan perintah ini!' }, { quoted: msg });
                         return;
                     }
 
-                    const botJid = sock.user?.id || '';
-                    const botNumber = botJid.split(':')[0].replace(/[^0-9]/g, '');
+                        // 2. Cek Status Admin Bot di Grup (Versi Anti-Error / Anti-Undefined)
+                    const groupMetadata = await sock.groupMetadata(from);
+                    const participants = groupMetadata.participants;
 
-                    const botPart = participants.find(p => p.id.replace(/[^0-9]/g, '').includes(botNumber));
+                    // Mengambil angka nomor HP bot saja (dibersihkan dari :1, @s.whatsapp.net, dll)
+                    const rawBotId = sock.user?.id || sock.user?.jid || '';
+                    const botCleanNumber = rawBotId.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+
+                    // Cari peserta yang nomor HP-nya persis sama dengan nomor bot
+                    const botPart = participants.find(p => {
+                        const pCleanNumber = p.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                        return pCleanNumber === botCleanNumber;
+                    });
+
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
@@ -96,6 +99,7 @@ async function startBot() {
                         return;
                     }
 
+                    // 3. Deteksi Target (Tag / Reply / Ketik Nomor)
                     const quoted = msg.message.extendedTextMessage?.contextInfo;
                     let targetUser = quoted?.mentionedJid?.[0] || quoted?.participant || (args[0] ? args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
                     
@@ -104,6 +108,7 @@ async function startBot() {
                         return;
                     }
 
+                    // 4. Eksekusi Kick
                     try {
                         await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
                         await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
