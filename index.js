@@ -206,7 +206,7 @@ async function startBot() {
                 let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
                 menuText += `• \`.ping\` - Cek kecepatan bot\n`;
                 menuText += `• \`.listmem\` - Daftar member grup\n`;
-                menuText += `• \`.kick @user\` - Kick member (Admin Grup)\n`;
+                menuText += `• \`.kick @user\` - Mengeluarkan member dari grup (Admin Grup)\n`;
                 menuText += `• \`.ban @user\` - Ban member\n`;
                 menuText += `• \`.ceksider\` - Cek anggota yang tidak pernah chat\n`;
                 menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
@@ -220,7 +220,7 @@ async function startBot() {
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
             }
 
-            // 5. FITUR .KICK (Khusus Admin Grup / Owner)
+            // 5. FITUR .KICK (Khusus Admin Grup)
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -228,7 +228,6 @@ async function startBot() {
                 }
 
                 try {
-                    // AMBIL DATA TERBARU LANGSUNG DARI SERVER WHATSAPP (MENGHINDARI CACHE LAMA)
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
@@ -240,7 +239,6 @@ async function startBot() {
                         return;
                     }
 
-                    // Deteksi JID bot yang akurat
                     const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
                     const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
@@ -251,19 +249,19 @@ async function startBot() {
                     }
 
                     let targetUser = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
+                    
                     if (!targetUser) {
-                        await sock.sendMessage(from, { text: '⚠️ Tag atau reply orang yang ingin di-kick!' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '⚠️ Silakan tag atau reply orang yang ingin dikeluarkan dari grup!' }, { quoted: msg });
                         return;
                     }
 
                     await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
-                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]}`, mentions: [targetUser] }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
                 } catch (err) {
                     console.error('Error kick:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot sudah menjadi admin grup.' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot dan kamu adalah admin grup.' }, { quoted: msg });
                 }
             }
-
 
             // 6. FITUR .BAN
             else if (command === '.ban') {
@@ -324,8 +322,11 @@ async function startBot() {
                         });
                         await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
                     } else if (command === '.kicksider') {
-                        const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                        const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
+                        const freshMetadata = await sock.groupMetadata(from);
+                        const freshParticipants = freshMetadata.participants;
+
+                        const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+                        const botPart = freshParticipants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                         const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                         if (!isBotAdmin) {
@@ -419,7 +420,6 @@ async function startBot() {
 
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
 
-                    // Menggunakan modul Sharp secara lokal untuk ketajaman & kejernihan
                     const enhancedBuffer = await sharp(buffer)
                         .sharpen()
                         .modulate({ brightness: 1.05, saturation: 1.1 })
@@ -437,7 +437,7 @@ async function startBot() {
                 }
             }
 
-            // 10. FITUR .HDVIDEO (Memperjelas Video)
+            // 10. FITUR .HDVIDEO
             else if (command === '.hdvideo' || command === '.reminivideo') {
                 try {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
