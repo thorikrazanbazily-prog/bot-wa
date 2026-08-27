@@ -9,6 +9,7 @@ const axios = require('axios');
 
 // LIST NOMOR OWNER / YANG DIIZINKAN
 const ownerNumber = ['6281298697777'];
+const ownerNumber = ['6282126168799'];
 
 // File untuk mencatat aktivitas member (Sider Detector)
 const activityFile = path.join(__dirname, 'group_activity.json');
