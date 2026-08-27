@@ -149,6 +149,124 @@ async function startBot() {
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
             }
 
+            // FITUR .RPG / .HUNT (Berburu Monster untuk dapat XP & Gold)
+            else if (command === '.rpg' || command === '.hunt') {
+                const rpgFile = path.join(__dirname, 'rpg_users.json');
+                let rpgData = {};
+                
+                if (fs.existsSync(rpgFile)) {
+                    rpgData = JSON.parse(fs.readFileSync(rpgFile));
+                }
+
+                const userId = senderNumber;
+
+                // Inisialisasi data pemain baru
+                if (!rpgData[userId]) {
+                    rpgData[userId] = {
+                        name: msg.pushName || 'Player',
+                        health: 100,
+                        exp: 0,
+                        level: 1,
+                        gold: 100,
+                        lastHunt: 0
+                    };
+                }
+
+                let player = rpgData[userId];
+
+                // Cooldown 15 detik agar tidak spam
+                const cooldown = 15000;
+                const now = Date.now();
+                if (now - player.lastHunt < cooldown) {
+                    const timeLeft = Math.ceil((cooldown - (now - player.lastHunt)) / 1000);
+                    await sock.sendMessage(from, { text: `⏳ Kamu masih kelelahan! Harap tunggu *${timeLeft} detik* lagi sebelum berburu berikutnya.` }, { quoted: msg });
+                    return;
+                }
+
+                player.lastHunt = now;
+
+                // Daftar monster random
+                const monsters = [
+                    { name: 'Goblin Liar 👺', hp: 30, exp: 50, gold: 20 },
+                    { name: 'Slime Hijau 🟢', hp: 20, exp: 30, gold: 10 },
+                    { name: 'Serigala Hutan 🐺', hp: 50, exp: 80, gold: 45 },
+                    { name: 'Orc Bermata Satu 👹', hp: 80, exp: 130, gold: 75 },
+                    { name: 'Naga Kecil 🐉', hp: 120, exp: 250, gold: 150 }
+                ];
+
+                const randomMonster = monsters[Math.floor(Math.random() * monsters.length)];
+                
+                // Kalkulasi menang/kalah sederhana berdasarkan level
+                const damageTaken = Math.floor(Math.random() * (randomMonster.hp / 2)) + 5;
+                player.health -= damageTaken;
+
+                if (player.health <= 0) {
+                    player.health = 100; // Reset HP jika mati
+                    fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+                    await sock.sendMessage(from, { text: `💀 *KAMU TERWASAT!*\n\nKamu kalah melawan ${randomMonster.name} dan kehilangan kesadaran.\nHP kamu telah dipulihkan kembali ke 100.` }, { quoted: msg });
+                    return;
+                }
+
+                // Tambah exp dan gold
+                player.exp += randomMonster.exp;
+                player.gold += randomMonster.gold;
+
+                // Sistem Naik Level (Setiap 200 exp naik 1 level)
+                let leveledUp = false;
+                const expNeeded = player.level * 200;
+                if (player.exp >= expNeeded) {
+                    player.level += 1;
+                    player.exp -= expNeeded;
+                    leveledUp = true;
+                }
+
+                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+
+                let rpgText = `⚔️ *BERBURU MONSTER (RPG)* ⚔️\n\n`;
+                rpgText += `🎯 *Musuh:* ${randomMonster.name}\n`;
+                rpgText += `🩸 *HP Kamu Tersisa:* ${player.health}/100 (-${damageTaken})\n\n`;
+                rpgText += `🎁 *Reward Didapat:*\n`;
+                rpgText += `✨ EXP: +${randomMonster.exp}\n`;
+                rpgText += `🪙 Gold: +${randomMonster.gold}\n\n`;
+
+                if (leveledUp) {
+                    rpgText += `🎉 *SELAMAT! KAMU NAIK LEVEL KE LEVEL ${player.level}!* 🎉\n\n`;
+                }
+
+                rpgText += `📊 *Status Kamu (@${senderNumber}):*\n`;
+                rpgText += `• Level: ${player.level}\n`;
+                rpgText += `• EXP: ${player.exp}/${player.level * 200}\n`;
+                rpgText += `• Gold: 🪙 ${player.gold}`;
+
+                await sock.sendMessage(from, { text: rpgText, mentions: [rawSender] }, { quoted: msg });
+            }
+
+            // FITUR .RPGLPROFILE / .PROFILE (Melihat status RPG)
+            else if (command === '.rpgprofile' || command === '.rpgstat') {
+                const rpgFile = path.join(__dirname, 'rpg_users.json');
+                if (!fs.existsSync(rpgFile)) {
+                    await sock.sendMessage(from, { text: '⚠️ Kamu belum pernah bermain RPG! Ketik *.rpg* untuk mulai berburu.' }, { quoted: msg });
+                    return;
+                }
+
+                const rpgData = JSON.parse(fs.readFileSync(rpgFile));
+                const player = rpgData[senderNumber];
+
+                if (!player) {
+                    await sock.sendMessage(from, { text: '⚠️ Data RPG kamu belum ada. Ketik *.rpg* untuk mulai bermain!' }, { quoted: msg });
+                    return;
+                }
+
+                let statText = `🛡️ *STATUS RPG CHARACTER* 🛡️\n\n`;
+                statText += `👤 *Nama:* ${player.name}\n`;
+                statText += `⭐ *Level:* ${player.level}\n`;
+                statText += `✨ *EXP:* ${player.exp} / ${player.level * 200}\n`;
+                statText += `🩸 *HP:* ${player.health} / 100\n`;
+                statText += `🪙 *Gold:* ${player.gold}\n`;
+
+                await sock.sendMessage(from, { text: statText }, { quoted: msg });
+            }
+
             // 3 & 4. FITUR .STIKER / .S & .WM
             else if (command === '.stiker' || command === '.s' || command === '.wm') {
                 try {
