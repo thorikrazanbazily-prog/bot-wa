@@ -133,7 +133,7 @@ async function startBot() {
 
             // FITUR .LISTFITUR / .MENU
             else if (command === '.listfitur' || command === '.menu' || command === '.help') {
-                let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
+                let menuText = `🤤 *DAFTAR FITUR BOT RIQ* 🤤\n\n`;
                 menuText += `⚡ *Utilities & System*\n`;
                 menuText += `• \`.ping\` - Mengecek kecepatan respon bot (ms)\n\n`;
                 
