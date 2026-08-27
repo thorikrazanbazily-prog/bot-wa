@@ -8,7 +8,7 @@ const ownerNumber = ['6281298697777'];
 // LIST NOMOR YANG DIIZINKAN MENGGUNAKAN FITUR .KICK (Selain Owner)
 // Masukkan nomor dengan awalan 62 tanpa tanda + atau spasi
 const allowedKickUsers = [
-    '6281234567890', // Contoh nomor 1 yang boleh kick
+    '6281298697777', // Contoh nomor 1 yang boleh kick
     '6289876543210'  // Contoh nomor 2 yang boleh kick (tambahkan atau hapus sesuai kebutuhan)
 ];
 
