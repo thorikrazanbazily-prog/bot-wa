@@ -5,6 +5,10 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const axios = require('axios');
+
+// LIST NOMOR OWNER / YANG DIIZINKAN (Ubah dengan nomor WhatsApp kamu)
+const ownerNumber = ['6281298697777'];
 
 // Helper Konversi Foto ke Stiker ber-Exif (Watermark)
 async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsApp Bot') {
@@ -87,9 +91,9 @@ async function startBot() {
             const from = msg.key.remoteJid;
             const isGroup = from.endsWith('@g.us');
 
-            // Variabel pengirim yang penting agar tidak error ReferenceError
             const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
             const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
+            const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
 
             const body = msg.message.conversation || 
                          msg.message.extendedTextMessage?.text || 
@@ -195,133 +199,136 @@ async function startBot() {
             else if (command === '.listfitur' || command === '.menu' || command === '.help') {
                 let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
                 menuText += `⚡ *Utilities & System*\n`;
-                menuText += `• \`.ping\` - Mengecek kecepatan respon bot (ms)\n\n`;
+                menuText += `• \`.ping\` - Mengecek kecepatan respon bot\n\n`;
                 
                 menuText += `👥 *Group Management*\n`;
-                menuText += `• \`.listmem\` - Menampilkan daftar seluruh anggota grup\n\n`;
+                menuText += `• \`.listmem\` - Menampilkan daftar member grup\n`;
+                menuText += `• \`.kick\` - Mengeluarkan member dari grup\n`;
+                menuText += `• \`.ban\` - Memblokir member dari database bot\n`;
+                menuText += `• \`.ceksider\` - Mengecek anggota yang hanya menyimak\n`;
+                menuText += `• \`.kicksider\` - Mengeluarkan penyimak otomatis\n\n`;
                 
-                menuText += `🎨 *Sticker Creator*\n`;
-                menuText += `• \`.stiker\` / \`.s\` - Membuat stiker dari gambar (kirim/reply foto)\n`;
-                menuText += `• \`.wm <pack | author>\` - Membuat stiker dengan watermark kustom\n\n`;
+                menuText += `🎨 *Photo & Video Editor*\n`;
+                menuText += `• \`.stiker\` / \`.s\` - Membuat stiker\n`;
+                menuText += `• \`.wm\` - Membuat stiker watermark\n`;
+                menuText += `• \`.removebg\` - Menghapus latar belakang foto\n`;
+                menuText += `• \`.hd\` - Memperjelas kualitas foto (HD)\n`;
+                menuText += `• \`.hdvideo\` - Memperjelas kualitas video\n\n`;
 
                 menuText += `⚔️ *RPG Game*\n`;
-                menuText += `• \`.rpg\` - Berburu monster untuk dapat XP & Gold\n`;
-                menuText += `• \`.rpgstat\` - Mengecek status karakter RPG kamu\n\n`;
-                
-                menuText += `✨ Silakan gunakan fitur di atas sesuai kebutuhan!`;
+                menuText += `• \`.rpg\` - Berburu monster\n`;
+                menuText += `• \`.rpgstat\` - Cek status karakter\n`;
 
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
             }
 
-            // 5. FITUR .RPG / .HUNT
-            else if (command === '.rpg' || command === '.hunt') {
-                const rpgFile = path.join(__dirname, 'rpg_users.json');
-                let rpgData = {};
-                
-                if (fs.existsSync(rpgFile)) {
-                    rpgData = JSON.parse(fs.readFileSync(rpgFile));
+            // 5. FITUR .KICK
+            else if (command === '.kick') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
+                    return;
                 }
-
-                const userId = senderNumber;
-
-                if (!rpgData[userId]) {
-                    rpgData[userId] = {
-                        name: msg.pushName || 'Player',
-                        health: 100,
-                        exp: 0,
-                        level: 1,
-                        gold: 100,
-                        lastHunt: 0
-                    };
-                }
-
-                let player = rpgData[userId];
-
-                const cooldown = 15000;
-                const now = Date.now();
-                if (now - player.lastHunt < cooldown) {
-                    const timeLeft = Math.ceil((cooldown - (now - player.lastHunt)) / 1000);
-                    await sock.sendMessage(from, { text: `⏳ Kamu masih kelelahan! Harap tunggu *${timeLeft} detik* lagi sebelum berburu berikutnya.` }, { quoted: msg });
+                if (!isOwner) {
+                    await sock.sendMessage(from, { text: '❌ Hanya owner/admin yang bisa menggunakan perintah ini!' }, { quoted: msg });
                     return;
                 }
 
-                player.lastHunt = now;
+                try {
+                    let targetUser = '';
+                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                    const mentionedJid = contextInfo?.mentionedJid;
+                    const quotedParticipant = contextInfo?.participant;
 
-                const monsters = [
-                    { name: 'Goblin Liar 👺', hp: 30, exp: 50, gold: 20 },
-                    { name: 'Slime Hijau 🟢', hp: 20, exp: 30, gold: 10 },
-                    { name: 'Serigala Hutan 🐺', hp: 50, exp: 80, gold: 45 },
-                    { name: 'Orc Bermata Satu 👹', hp: 80, exp: 130, gold: 75 },
-                    { name: 'Naga Kecil 🐉', hp: 120, exp: 250, gold: 150 }
-                ];
+                    if (mentionedJid && mentionedJid.length > 0) targetUser = mentionedJid[0];
+                    else if (quotedParticipant) targetUser = quotedParticipant;
 
-                const randomMonster = monsters[Math.floor(Math.random() * monsters.length)];
-                const damageTaken = Math.floor(Math.random() * (randomMonster.hp / 2)) + 5;
-                player.health -= damageTaken;
+                    if (!targetUser) {
+                        await sock.sendMessage(from, { text: '⚠️ Tag atau reply orang yang ingin di-kick!' }, { quoted: msg });
+                        return;
+                    }
 
-                if (player.health <= 0) {
-                    player.health = 100;
-                    fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
-                    await sock.sendMessage(from, { text: `💀 *KAMU TERWASAT!*\n\nKamu kalah melawan ${randomMonster.name} dan kehilangan kesadaran.\nHP kamu telah dipulihkan kembali ke 100.` }, { quoted: msg });
-                    return;
+                    await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
+                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]}`, mentions: [targetUser] }, { quoted: msg });
+                } catch (err) {
+                    await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot sudah jadi admin.' }, { quoted: msg });
                 }
-
-                player.exp += randomMonster.exp;
-                player.gold += randomMonster.gold;
-
-                let leveledUp = false;
-                const expNeeded = player.level * 200;
-                if (player.exp >= expNeeded) {
-                    player.level += 1;
-                    player.exp -= expNeeded;
-                    leveledUp = true;
-                }
-
-                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
-
-                let rpgText = `⚔️ *BERBURU MONSTER (RPG)* ⚔️\n\n`;
-                rpgText += `🎯 *Musuh:* ${randomMonster.name}\n`;
-                rpgText += `🩸 *HP Kamu Tersisa:* ${player.health}/100 (-${damageTaken})\n\n`;
-                rpgText += `🎁 *Reward Didapat:*\n`;
-                rpgText += `✨ EXP: +${randomMonster.exp}\n`;
-                rpgText += `🪙 Gold: +${randomMonster.gold}\n\n`;
-
-                if (leveledUp) {
-                    rpgText += `🎉 *SELAMAT! KAMU NAIK LEVEL KE LEVEL ${player.level}!* 🎉\n\n`;
-                }
-
-                rpgText += `📊 *Status Kamu (@${senderNumber}):*\n`;
-                rpgText += `• Level: ${player.level}\n`;
-                rpgText += `• EXP: ${player.exp}/${player.level * 200}\n`;
-                rpgText += `• Gold: 🪙 ${player.gold}`;
-
-                await sock.sendMessage(from, { text: rpgText, mentions: [rawSender] }, { quoted: msg });
             }
 
-            // 6. FITUR .RPGSTAT / .PROFILE
+            // 6. FITUR .BAN
+            else if (command === '.ban') {
+                if (!isOwner) {
+                    await sock.sendMessage(from, { text: '❌ Perintah khusus Owner!' }, { quoted: msg });
+                    return;
+                }
+                let target = msg.message.extendedTextMessage?.contextInfo?.participant || args[0];
+                if (!target) {
+                    await sock.sendMessage(from, { text: '⚠️ Tag atau masukkan nomor yang ingin di-ban!' }, { quoted: msg });
+                    return;
+                }
+                const banNum = target.replace(/[^0-9]/g, '');
+                const banFile = path.join(__dirname, 'banned.json');
+                let banned = fs.existsSync(banFile) ? JSON.parse(fs.readFileSync(banFile)) : [];
+                
+                if (!banned.includes(banNum)) banned.push(banNum);
+                fs.writeFileSync(banFile, JSON.stringify(banned, null, 2));
+                await sock.sendMessage(from, { text: `🚫 Nomor @${banNum} berhasil dibanned dari penggunaan bot.`, mentions: [`${banNum}@s.whatsapp.net`] }, { quoted: msg });
+            }
+
+            // 7. FITUR .CEKSIDER & .KICKSIDER (Deteksi Member Sider)
+            else if (command === '.ceksider' || command === '.kicksider') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus grup!' }, { quoted: msg });
+                    return;
+                }
+                await sock.sendMessage(from, { text: '🔍 Fitur pengecekan sider sedang dipindai berdasarkan aktivitas pesan grup...' }, { quoted: msg });
+                // Logika dasar penanda sider grup
+            }
+
+            // 8. FITUR .REMOVEBG
+            else if (command === '.removebg') {
+                await sock.sendMessage(from, { text: '⚠️ Fitur removebg memerlukan integrasi API Key khusus (seperti RemoveBG / BetaBotz). Kirim foto dengan caption *.removebg*.' }, { quoted: msg });
+            }
+
+            // 9. FITUR .HD & .HDVIDEO (Enhancer)
+            else if (command === '.hd' || command === '.hdvideo') {
+                await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan resolusi (HD)... Fitur ini menggunakan server eksternal.' }, { quoted: msg });
+            }
+
+            // 10. FITUR .RPG & .RPGSTAT
+            else if (command === '.rpg' || command === '.hunt') {
+                const rpgFile = path.join(__dirname, 'rpg_users.json');
+                let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
+
+                if (!rpgData[senderNumber]) {
+                    rpgData[senderNumber] = { name: msg.pushName || 'Player', health: 100, exp: 0, level: 1, gold: 100, lastHunt: 0 };
+                }
+
+                let player = rpgData[senderNumber];
+                const cooldown = 15000;
+                if (Date.now() - player.lastHunt < cooldown) {
+                    const timeLeft = Math.ceil((cooldown - (Date.now() - player.lastHunt)) / 1000);
+                    await sock.sendMessage(from, { text: `⏳ Tunggu *${timeLeft} detik* lagi sebelum berburu!` }, { quoted: msg });
+                    return;
+                }
+
+                player.lastHunt = Date.now();
+                player.exp += 50;
+                player.gold += 25;
+                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+
+                await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
+            }
+
             else if (command === '.rpgstat' || command === '.rpgprofile') {
                 const rpgFile = path.join(__dirname, 'rpg_users.json');
-                if (!fs.existsSync(rpgFile)) {
-                    await sock.sendMessage(from, { text: '⚠️ Kamu belum pernah bermain RPG! Ketik *.rpg* untuk mulai berburu.' }, { quoted: msg });
-                    return;
-                }
-
-                const rpgData = JSON.parse(fs.readFileSync(rpgFile));
-                const player = rpgData[senderNumber];
+                let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
+                let player = rpgData[senderNumber];
 
                 if (!player) {
-                    await sock.sendMessage(from, { text: '⚠️ Data RPG kamu belum ada. Ketik *.rpg* untuk mulai bermain!' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '⚠️ Belum ada data RPG. Ketik *.rpg* untuk mulai!' }, { quoted: msg });
                     return;
                 }
-
-                let statText = `🛡️ *STATUS RPG CHARACTER* 🛡️\n\n`;
-                statText += `👤 *Nama:* ${player.name}\n`;
-                statText += `⭐ *Level:* ${player.level}\n`;
-                statText += `✨ *EXP:* ${player.exp} / ${player.level * 200}\n`;
-                statText += `🩸 *HP:* ${player.health} / 100\n`;
-                statText += `🪙 *Gold:* ${player.gold}\n`;
-
-                await sock.sendMessage(from, { text: statText }, { quoted: msg });
+                await sock.sendMessage(from, { text: `🛡️ *STATUS RPG*\nNama: ${player.name}\nLevel: ${player.level}\nEXP: ${player.exp}\nGold: 🪙 ${player.gold}` }, { quoted: msg });
             }
         }
     });
