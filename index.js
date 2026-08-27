@@ -214,6 +214,7 @@ async function startBot() {
                 menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
                 menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
                 menuText += `• \`.hd\` - Memperjelas kualitas foto (Reply foto)\n`;
+                menuText += `• \`.getip <ip/domain>\` - Cek informasi IP / Domain\n`;
                 menuText += `• \`.rpg\` - Berburu monster RPG\n`;
 
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
@@ -230,7 +231,6 @@ async function startBot() {
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
-                    // Cek apakah pengirim adalah admin grup atau owner
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
@@ -239,7 +239,6 @@ async function startBot() {
                         return;
                     }
 
-                    // Cek apakah bot sudah jadi admin
                     const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                     const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
@@ -290,7 +289,6 @@ async function startBot() {
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
 
-                    // Cek izin pengirim (harus admin/owner jika .kicksider)
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
@@ -304,7 +302,6 @@ async function startBot() {
 
                     let siders = [];
                     participants.forEach(mem => {
-                        // Cek jika member tidak aktif dan bukan bot sendiri
                         if (!groupAct[mem.id] && mem.id !== sock.user.id && mem.id.endsWith('@s.whatsapp.net')) {
                             siders.push(mem.id);
                         }
@@ -324,7 +321,6 @@ async function startBot() {
                         });
                         await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
                     } else if (command === '.kicksider') {
-                        // Cek apakah bot admin sebelum eksekusi kick masal
                         const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
                         const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                         const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
@@ -338,7 +334,7 @@ async function startBot() {
                         for (let siderId of siders) {
                             try {
                                 await sock.groupParticipantsUpdate(from, [siderId], 'remove');
-                                await new Promise(resolve => setTimeout(resolve, 2000)); // Jeda agar terhindar dari spam rate limit
+                                await new Promise(resolve => setTimeout(resolve, 2000));
                             } catch (e) {
                                 console.error(`Gagal kick sider ${siderId}:`, e.message);
                             }
@@ -437,33 +433,7 @@ async function startBot() {
                 }
             }
 
-            // 10. FITUR RPG
-            else if (command === '.rpg' || command === '.hunt') {
-                const rpgFile = path.join(__dirname, 'rpg_users.json');
-                let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
-
-                if (!rpgData[senderNumber]) {
-                    rpgData[senderNumber] = { name: msg.pushName || 'Player', health: 100, exp: 0, level: 1, gold: 100, lastHunt: 0 };
-                }
-
-                let player = rpgData[senderNumber];
-                const cooldown = 15000;
-                if (Date.now() - player.lastHunt < cooldown) {
-                    const timeLeft = Math.ceil((cooldown - (Date.now() - player.lastHunt)) / 1000);
-                    await sock.sendMessage(from, { text: `⏳ Tunggu *${timeLeft} detik* lagi sebelum berburu!` }, { quoted: msg });
-                    return;
-                }
-
-                player.lastHunt = Date.now();
-                player.exp += 50;
-                player.gold += 25;
-                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
-
-                await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
-            }
-        }
-
-            // FITUR .GETIP (Cek Informasi IP / Domain)
+            // 10. FITUR .GETIP
             else if (command === '.getip') {
                 const targetIp = args[0];
                 if (!targetIp) {
@@ -498,6 +468,32 @@ async function startBot() {
                     await sock.sendMessage(from, { text: '❌ Terjadi kesalahan saat mengambil data IP.' }, { quoted: msg });
                 }
             }
+
+            // 11. FITUR RPG
+            else if (command === '.rpg' || command === '.hunt') {
+                const rpgFile = path.join(__dirname, 'rpg_users.json');
+                let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
+
+                if (!rpgData[senderNumber]) {
+                    rpgData[senderNumber] = { name: msg.pushName || 'Player', health: 100, exp: 0, level: 1, gold: 100, lastHunt: 0 };
+                }
+
+                let player = rpgData[senderNumber];
+                const cooldown = 15000;
+                if (Date.now() - player.lastHunt < cooldown) {
+                    const timeLeft = Math.ceil((cooldown - (Date.now() - player.lastHunt)) / 1000);
+                    await sock.sendMessage(from, { text: `⏳ Tunggu *${timeLeft} detik* lagi sebelum berburu!` }, { quoted: msg });
+                    return;
+                }
+
+                player.lastHunt = Date.now();
+                player.exp += 50;
+                player.gold += 25;
+                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+
+                await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
+            }
+        }
     });
 }
 
