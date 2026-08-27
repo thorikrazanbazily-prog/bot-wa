@@ -300,6 +300,17 @@ async function startBot() {
                 }
             }
 
+                // FITUR CEK IP
+            else if (command === '.getip') {
+                try {
+                    const ipRes = await axios.get('https://api.ipify.org?format=json');
+                    await sock.sendMessage(from, { text: `🌐 IP Perangkat ini adalah: *${ipRes.data.ip}*` }, { quoted: msg });
+                } catch (e) {
+                    await sock.sendMessage(from, { text: '❌ Gagal mengecek IP.' }, { quoted: msg });
+                }
+            }
+
+
             // 6. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
