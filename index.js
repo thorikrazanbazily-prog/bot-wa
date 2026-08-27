@@ -1,281 +1,616 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const pino = require('pino');
+const qrcode = require('qrcode-terminal');
+const { Sticker, StickerTypes } = require('wa-sticker-formatter');
+const axios = require('axios');
+const fs = require('fs');
 
 // ==========================================
-// CONFIGURATION & DATABASE (In-Memory)
+// KONFIGURASI OWNER & VIP
 // ==========================================
-const ownerNumber = ['6281298697777']; // Ganti dengan nomor WhatsApp kamu
-let isPublic = true;                   // Status Mode Bot (.publik / .private)
-const welcomeMessages = {};             // Menyimpan pesan welcome custom per grup
-const tiktokDb = {};                    // Database verifikasi akun TikTok
+const OWNER_NUMBERS = ['6281298697777']; // Masukkan nomor owner di sini
+const VIP_NUMBERS = ['6285722869044', '6285722256098', '6282126168799'];     // Masukkan nomor VIP agar tetap bisa akses saat private
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+// FILE LOKAL UNTUK MENYIMPAN SETTINGAN & DATABASE
+const SETTINGS_FILE = 'bot_settings.json';
+const DB_VERIF_FILE = 'verified_users.json';
+const DB_RPG_FILE = 'rpg.json';
+
+// Fungsi membaca settingan bot
+const loadSettings = () => {
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) {
+            const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
+            const parsed = JSON.parse(data);
+            return parsed.isPublicMode !== undefined ? parsed.isPublicMode : true;
+        }
+    } catch (e) {
+        console.error('Gagal membaca settingan:', e);
+    }
+    return true;
+};
+
+// Fungsi menyimpan settingan bot
+const saveSettings = (isPublic) => {
+    try {
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ isPublicMode: isPublic }, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan settingan:', e);
+    }
+};
+
+let isPublicMode = loadSettings();
+
+// Fungsi membaca database verifikasi TikTok
+const loadDatabase = () => {
+    try {
+        if (fs.existsSync(DB_VERIF_FILE)) {
+            const data = fs.readFileSync(DB_VERIF_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error('Gagal membaca database verif:', e);
+    }
+    return {};
+};
+
+const saveDatabase = (db) => {
+    try {
+        fs.writeFileSync(DB_VERIF_FILE, JSON.stringify(db, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan database verif:', e);
+    }
+};
+
+// Fungsi Database RPG
+const loadRpgDb = () => {
+    try {
+        if (fs.existsSync(DB_RPG_FILE)) {
+            return JSON.parse(fs.readFileSync(DB_RPG_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Gagal membaca database RPG:', e);
+    }
+    return {};
+};
+
+const saveRpgDb = (db) => {
+    try {
+        fs.writeFileSync(DB_RPG_FILE, JSON.stringify(db, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan database RPG:', e);
+    }
+};
+
+// Helper presisi mengekstrak digit angka saja
+const extractNumber = (jid) => {
+    if (!jid || typeof jid !== 'string') return '';
+    const clean = jid.split('@')[0].split(':')[0];
+    return clean.replace(/[^0-9]/g, '');
+};
+
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
 
     const sock = makeWASocket({
-        auth: state,
-        logger: pino({ level: 'silent' })
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: true,
+        auth: state
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // ==========================================
-    // MANAGEMENT KONEKSI
-    // ==========================================
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
+        
         if (qr) {
-            console.log('\nScan QR Code di bawah menggunakan WhatsApp:');
+            console.log('Scan QR Code di bawah ini menggunakan WhatsApp:');
             qrcode.generate(qr, { small: true });
         }
+
         if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log('Koneksi terputus. Menghubungkan ulang...', shouldReconnect);
-            if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
-            console.log('✅ Bot WhatsApp berhasil terhubung!');
-        }
-    });
-
-    // ==========================================
-    // FITUR SETWELCOME (Event Member Masuk)
-    // ==========================================
-    sock.ev.on('group-participants.update', async (update) => {
-        try {
-            const { id, participants, action } = update;
-            if (action === 'add') {
-                const customWelcome = welcomeMessages[id] || 'Selamat datang @user di grup!';
-                for (const num of participants) {
-                    const text = customWelcome.replace('@user', `@${num.split('@')[0]}`);
-                    await sock.sendMessage(id, { text, mentions: [num] });
-                }
+            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            console.log('Koneksi terputus, mencoba menghubungkan ulang...', shouldReconnect);
+            if (shouldReconnect) {
+                connectToWhatsApp();
             }
-        } catch (err) {
-            console.error('Error pada event welcome:', err);
+        } else if (connection === 'open') {
+            console.log('✅ Bot WhatsApp (Baileys) SIAP DIGUNAKAN!');
         }
     });
 
-    // ==========================================
-    // COMMAND HANDLER
-    // ==========================================
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
+    sock.ev.on('messages.upsert', async (m) => {
+        const msg = m.messages[0];
+        if (!msg.message) return;
 
-        for (const msg of messages) {
+        const from = msg.key.remoteJid;
+        const isGroup = from.endsWith('@g.us');
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const senderNumber = extractNumber(senderJid);
+
+        const text = msg.message.conversation || 
+                     msg.message.extendedTextMessage?.text || 
+                     msg.message.imageMessage?.caption || '';
+
+        if (!text) return;
+        const args = text.trim().split(/ +/);
+        const command = args.shift().toLowerCase();
+
+        const isOwner = msg.key.fromMe || OWNER_NUMBERS.includes(senderNumber);
+        const isVIP = VIP_NUMBERS.includes(senderNumber);
+
+        // ==========================================
+        // FITUR MODE ACCESS (.private & .publik)
+        // ==========================================
+        if (command === '.private' || command === '.self') {
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
+            isPublicMode = false;
+            saveSettings(isPublicMode);
+            return sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke *MODE PRIVATE*.\n\nHanya Owner dan daftar nomor VIP yang dapat menggunakan bot.' }, { quoted: msg });
+        } 
+        else if (command === '.publik' || command === '.public') {
+            if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
+            isPublicMode = true;
+            saveSettings(isPublicMode);
+            return sock.sendMessage(from, { text: '🌐 Bot berhasil diubah ke *MODE PUBLIK*.' }, { quoted: msg });
+        }
+
+        // KUNCI UTAMA: Jika mode private, abaikan jika bukan Owner dan bukan VIP
+        if (!isPublicMode && !isOwner && !isVIP) return;
+
+        // ==========================================
+        // FITUR MENU & PING
+        // ==========================================
+        if (command === '.menu' || command === '.help') {
+            const statusMode = isPublicMode ? '🌐 PUBLIK' : '🔒 PRIVATE';
+            const menuText = 
+`🤖 *BOT WHATSAPP (BAILEYS)*
+📊 *Status Bot:* ${statusMode}
+
+📌 *PERINTAH UTAMA*
+* ➔ *.menu* : Menampilkan menu
+* ➔ *.ping* : Cek kecepatan respon bot
+
+🎨 *STIKER & MEDIA*
+* ➔ *.stiker* / *.s* : Kirim/reply foto jadi stiker
+* ➔ *.wm <pack> | <author>* : Ubah watermark stiker
+
+👥 *GRUP & FITUR SPESIAL*
+* ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
+* ➔ *.kick @user* : Mengeluarkan member dari grup
+* ➔ *.promote / .demote @user* : Atur admin grup
+
+🎵 *VERIFIKASI TIKTOK*
+* ➔ *.verif <username>* : Verifikasi akun TikTok (Maks 1)
+* ➔ *.unverif* : Batalkan verifikasi akun TikTok
+
+⚔️ *GAME RPG*
+* ➔ *.rpg* / *.status* / *.profile* : Cek profil karakter RPG
+* ➔ *.pilihjob <warrior/mage/archer>* : Memilih job karakter
+* ➔ *.adventure* / *.hunt* : Berburu monster & cari EXP/Gold
+* ➔ *.heal* : Memulihkan HP karakter
+* ➔ *.leaderboard* / *.toprpg* : Peringkat pemain RPG teratas`;
+
+            await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+        } 
+        else if (command === '.ping') {
+            const start = Date.now();
+            await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${Date.now() - start} ms*` }, { quoted: msg });
+        }
+
+        // ==========================================
+        // FITUR STIKER (.sticker / .stiker / .s)
+        // ==========================================
+        else if (command === '.sticker' || command === '.stiker' || command === '.s') {
             try {
-                // Safe check pesan
-                if (!msg.message || msg.key.fromMe) continue;
+                const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                const qMsg = contextInfo?.quotedMessage;
+                const isDirectImage = msg.message.imageMessage;
+                
+                let quotedImageMsg = qMsg?.imageMessage || 
+                                     qMsg?.ephemeralMessage?.message?.imageMessage || 
+                                     qMsg?.viewOnceMessage?.message?.imageMessage ||
+                                     qMsg?.viewOnceMessageV2?.message?.imageMessage;
 
-
-                const from = msg.key.remoteJid;
-                const isGroup = from.endsWith('@g.us');
-                const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
-                const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
-                const isOwner = ownerNumber.includes(senderNumber);
-
-                // Ekstraksi teks pesan yang lebih aman
-                const body = msg.message.conversation || 
-                             msg.message.extendedTextMessage?.text || 
-                             msg.message.imageMessage?.caption || 
-                             msg.message.videoMessage?.caption || '';
-                             
-                const pesan = body.trim();
-                if (!pesan) continue;
-
-                // Modul Mode Bot (.private / .publik)
-                if (!isPublic && !isOwner) continue;
-
-                // Handler Quick Chat (Ketik 'myinfo' atau '.myinfo')
-                if (pesan.toLowerCase() === 'myinfo' || pesan.toLowerCase() === '.myinfo') {
-                    const data = tiktokDb[senderNumber];
-                    if (!data) {
-                        await sock.sendMessage(from, { text: '❌ Kamu belum memverifikasi akun TikTok!' }, { quoted: msg });
-                    } else {
-                        const infoText = `📋 *INFORMASI AKUN TIKTOK*\n\n` +
-                                         `• *WhatsApp:* @${senderNumber}\n` +
-                                         `• *Username TikTok:* @${data.username}\n` +
-                                         `• *Status Verifikasi:* Verified ✅\n` +
-                                         `• *Waktu Verifikasi:* ${data.time}`;
-                        await sock.sendMessage(from, { text: infoText, mentions: [rawSender] }, { quoted: msg });
-                    }
-                    continue;
+                if (!isDirectImage && !quotedImageMsg) {
+                    return sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto yang ingin dijadikan stiker!' }, { quoted: msg });
                 }
 
-                if (!pesan.startsWith('.')) continue;
+                await sock.sendMessage(from, { text: '⏳ Sedang membuat stiker...' }, { quoted: msg });
 
-                const command = pesan.toLowerCase().split(' ')[0];
-                const args = pesan.split(' ').slice(1);
-
-                // Helper Pengecekan Admin (Metode Normalisasi Angka)
-                let isAdmin = false;
-                let isBotAdmin = false;
-                if (isGroup) {
-                    const groupMetadata = await sock.groupMetadata(from);
-                    const participants = groupMetadata.participants;
-
-                    // Cek Admin Pengirim
-                    const senderPart = participants.find(p => p.id.split('@')[0].replace(/[^0-9]/g, '') === senderNumber);
-                    isAdmin = senderPart && (senderPart.admin === 'admin' || senderPart.admin === 'superadmin');
-
-                    // Cek Admin Bot (Anti-Undefined)
-                    const rawBotId = sock.user?.id || '';
-                    const botCleanNumber = rawBotId.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                    const botPart = participants.find(p => p.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') === botCleanNumber);
-                    isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
-                }
-
-                // Helper Target User
-                const quoted = msg.message.extendedTextMessage?.contextInfo;
-                let targetUser = quoted?.mentionedJid?.[0] || quoted?.participant || (args[0] ? args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
-
-                // ------------------------------------------
-                // 1. FITUR .MENU
-                // ------------------------------------------
-                if (command === '.menu') {
-                    const menuText = `🤖 *BOT MULTIFUNGSI MENU*\n\n` +
-                                     `📌 *General & Utility*\n` +
-                                     `• *.menu* : Menampilkan daftar menu\n` +
-                                     `• *.ping* : Cek performa & status bot\n` +
-                                     `• *.verify <username>* : Verifikasi TikTok\n` +
-                                     `• *myinfo* : Cek info TikTok terverifikasi\n\n` +
-                                     `👥 *Group Administration*\n` +
-                                     `• *.kick* : Mengeluarkan member\n` +
-                                     `• *.promote* : Menaikkan status ke Admin\n` +
-                                     `• *.demote* : Menurunkan status dari Admin\n` +
-                                     `• *.setwelcome <teks>* : Custom pesan welcome (@user)\n\n` +
-                                     `⚙️ *Owner Settings*\n` +
-                                     `• *.private* : Mode Khusus Owner\n` +
-                                     `• *.publik* : Mode Semua Orang\n\n` +
-                                     `*Status Bot saat ini:* [ ${isPublic ? 'Public' : 'Private'} ]`;
-                    await sock.sendMessage(from, { text: menuText }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 2. FITUR .PING
-                // ------------------------------------------
-                else if (command === '.ping') {
-                    const startTime = Date.now();
-                    const uptimeSec = process.uptime();
-                    const hours = Math.floor(uptimeSec / 3600);
-                    const minutes = Math.floor((uptimeSec % 3600) / 60);
-                    const seconds = Math.floor(uptimeSec % 60);
-                    
-                    const latency = Date.now() - startTime;
-                    const pingText = `🚀 *BOT STATUS & PING*\n\n` +
-                                     `• *Kecepatan Respon:* ${latency} ms\n` +
-                                     `• *Uptime Bot:* ${hours}j ${minutes}m ${seconds}s\n` +
-                                     `• *Node.js Runtime:* ${process.version}\n` +
-                                     `• *Platform Server:* ${process.platform}\n` +
-                                     `• *Memory Usage:* ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2)} MB`;
-                    await sock.sendMessage(from, { text: pingText }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 3. FITUR .VERIFY (TikTok Verification)
-                // ------------------------------------------
-                else if (command === '.verify') {
-                    if (!args[0]) {
-                        await sock.sendMessage(from, { text: '⚠️ Masukkan username TikTok kamu!\nContoh: *.verify akun_tiktok*' }, { quoted: msg });
-                        return;
-                    }
-
-                    const tiktokUser = args[0].replace('@', '');
-                    tiktokDb[senderNumber] = {
-                        username: tiktokUser,
-                        time: new Date().toLocaleString('id-ID')
+                let mediaTarget = msg;
+                if (quotedImageMsg) {
+                    mediaTarget = {
+                        key: {
+                            remoteJid: from,
+                            fromMe: false,
+                            id: contextInfo.stanzaId,
+                            participant: contextInfo.participant || from
+                        },
+                        message: qMsg
                     };
-
-                    const profileUrl = `https://www.tiktok.com/@${tiktokUser}`;
-                    
-                    const verifyText = `✅ *VERIFIKASI TIKTOK BERHASIL*\n\n` +
-                                       `Akun TikTok *@${tiktokUser}* telah terhubung dengan nomor WhatsApp kamu.\n\n` +
-                                       `🔗 *Profil TikTok:* ${profileUrl}\n\n` +
-                                       `💡 *Tips:* Ketik *myinfo* untuk melihat detail status verifikasi kamu kapan saja.`;
-
-                    await sock.sendMessage(from, { text: verifyText }, { quoted: msg });
                 }
 
-                // ------------------------------------------
-                // 4. FITUR .PROMOTE
-                // ------------------------------------------
-                else if (command === '.promote') {
-                    if (!isGroup) return sock.sendMessage(from, { text: '⚠️ Khusus di dalam grup!' }, { quoted: msg });
-                    if (!isAdmin && !isOwner) return sock.sendMessage(from, { text: '❌ Hanya Admin/Owner yang bisa menggunakan fitur ini!' }, { quoted: msg });
-                    if (!isBotAdmin) return sock.sendMessage(from, { text: '❌ Bot harus menjadi Admin Grup terlebih dahulu!' }, { quoted: msg });
-                    if (!targetUser) return sock.sendMessage(from, { text: '⚠️ Tag atau reply member yang ingin dijadikan Admin!' }, { quoted: msg });
+                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
-                    await sock.groupParticipantsUpdate(from, [targetUser], 'promote');
-                    await sock.sendMessage(from, { text: `✅ Berhasil menaikkan @${targetUser.split('@')[0]} menjadi Admin Grup!`, mentions: [targetUser] }, { quoted: msg });
+                if (!mediaBuffer || mediaBuffer.length === 0) {
+                    throw new Error('Buffer kosong.');
                 }
 
-                // ------------------------------------------
-                // 5. FITUR .DEMOTE
-                // ------------------------------------------
-                else if (command === '.demote') {
-                    if (!isGroup) return sock.sendMessage(from, { text: '⚠️ Khusus di dalam grup!' }, { quoted: msg });
-                    if (!isAdmin && !isOwner) return sock.sendMessage(from, { text: '❌ Hanya Admin/Owner yang bisa menggunakan fitur ini!' }, { quoted: msg });
-                    if (!isBotAdmin) return sock.sendMessage(from, { text: '❌ Bot harus menjadi Admin Grup terlebih dahulu!' }, { quoted: msg });
-                    if (!targetUser) return sock.sendMessage(from, { text: '⚠️ Tag atau reply Admin yang ingin diturunkan!' }, { quoted: msg });
+                const sticker = new Sticker(mediaBuffer, {
+                    pack: '',
+                    author: '',
+                    type: StickerTypes.FULL,
+                    quality: 70
+                });
 
-                    await sock.groupParticipantsUpdate(from, [targetUser], 'demote');
-                    await sock.sendMessage(from, { text: `✅ Berhasil menurunkan @${targetUser.split('@')[0]} menjadi Member biasa.`, mentions: [targetUser] }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 6. FITUR .SETWELCOME
-                // ------------------------------------------
-                else if (command === '.setwelcome') {
-                    if (!isGroup) return sock.sendMessage(from, { text: '⚠️ Khusus di dalam grup!' }, { quoted: msg });
-                    if (!isAdmin && !isOwner) return sock.sendMessage(from, { text: '❌ Hanya Admin/Owner yang dapat mengatur teks Welcome!' }, { quoted: msg });
-                    if (!args[0]) return sock.sendMessage(from, { text: '⚠️ Masukkan teks sambutan!\nGunakan tag *@user* untuk menyebut member baru.\n\nContoh: *.setwelcome Selamat datang @user di grup kami!*' }, { quoted: msg });
-
-                    const customText = args.join(' ');
-                    welcomeMessages[from] = customText;
-                    await sock.sendMessage(from, { text: `✅ Teks pesan welcome untuk grup ini berhasil diperbarui!\n\n*Preview:* ${customText}` }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 7. FITUR .PRIVATE
-                // ------------------------------------------
-                else if (command === '.private') {
-                    if (!isOwner) return sock.sendMessage(from, { text: '❌ Fitur ini khusus Owner Bot!' }, { quoted: msg });
-                    isPublic = false;
-                    await sock.sendMessage(from, { text: '🔒 Status bot berhasil diubah menjadi *PRIVATE* (Hanya merespon Owner).' }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 8. FITUR .PUBLIK
-                // ------------------------------------------
-                else if (command === '.publik') {
-                    if (!isOwner) return sock.sendMessage(from, { text: '❌ Fitur ini khusus Owner Bot!' }, { quoted: msg });
-                    isPublic = true;
-                    await sock.sendMessage(from, { text: '🌐 Status bot berhasil diubah menjadi *PUBLIC* (Dapat digunakan semua orang).' }, { quoted: msg });
-                }
-
-                // ------------------------------------------
-                // 9. FITUR .KICK
-                // ------------------------------------------
-                else if (command === '.kick') {
-                    if (!isGroup) return sock.sendMessage(from, { text: '⚠️ Khusus di dalam grup!' }, { quoted: msg });
-                    if (!isAdmin && !isOwner) return sock.sendMessage(from, { text: '❌ Hanya Admin Grup dan Owner yang diizinkan menggunakan perintah ini!' }, { quoted: msg });
-                    if (!isBotAdmin) return sock.sendMessage(from, { text: '❌ Bot harus dijadikan *Admin Grup* terlebih dahulu.' }, { quoted: msg });
-                    if (!targetUser) return sock.sendMessage(from, { text: '⚠️ Tag, reply, atau masukkan nomor member yang ingin dikeluarkan!' }, { quoted: msg });
-
-                    try {
-                        await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
-                        await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
-                    } catch (e) {
-                        await sock.sendMessage(from, { text: `❌ Gagal mengeluarkan user. Pastikan nomor valid atau bot memiliki hak akses.` }, { quoted: msg });
-                    }
-                }
+                const stickerBuffer = await sticker.toBuffer();
+                await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
 
             } catch (err) {
-                console.error(`Error pada command handler:`, err);
+                console.error('Error Sticker Detail:', err);
+                await sock.sendMessage(from, { text: '❌ Gagal membuat stiker. Pastikan media berupa foto valid!' }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR WATERMARK STIKER (.wm)
+        // ==========================================
+        else if (command === '.wm' || command === '.watermark') {
+            try {
+                const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                const qMsg = contextInfo?.quotedMessage;
+
+                let quotedStickerMsg = qMsg?.stickerMessage || 
+                                       qMsg?.ephemeralMessage?.message?.stickerMessage;
+
+                if (!quotedStickerMsg) {
+                    return sock.sendMessage(from, { text: '⚠️ Reply stiker yang ingin diubah watermark-nya!\nContoh: *.wm Packname | Author*' }, { quoted: msg });
+                }
+
+                const input = args.join(' ');
+                const [packName, authorName] = input.split('|').map(str => str ? str.trim() : '');
+
+                const finalPack = packName || 'Created By';
+                const finalAuthor = authorName || 'My Bot';
+
+                await sock.sendMessage(from, { text: '⏳ Memproses ubah watermark...' }, { quoted: msg });
+
+                const mediaTarget = {
+                    key: {
+                        remoteJid: from,
+                        fromMe: false,
+                        id: contextInfo.stanzaId,
+                        participant: contextInfo.participant || from
+                    },
+                    message: qMsg
+                };
+
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+
+                if (!mediaBuffer || mediaBuffer.length === 0) {
+                    throw new Error('Buffer stiker kosong.');
+                }
+
+                const sticker = new Sticker(mediaBuffer, {
+                    pack: finalPack,
+                    author: finalAuthor,
+                    type: StickerTypes.FULL,
+                    quality: 70
+                });
+
+                const stickerBuffer = await sticker.toBuffer();
+                await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+
+            } catch (err) {
+                console.error('Error Watermark Detail:', err);
+                await sock.sendMessage(from, { text: '❌ Gagal mengubah watermark stiker. Pastikan stiker yang di-reply adalah stiker statis!' }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR HIDETAG (.ah)
+        // ==========================================
+        else if (command === '.ah' || command === '.hidetag') {
+            if (!isGroup) {
+                return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+            }
+
+            try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const participants = groupMetadata.participants || [];
+                const adminParticipants = participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
+                const adminNumbers = adminParticipants.map(p => extractNumber(p.id));
+
+                const isSenderAdmin = adminNumbers.includes(senderNumber);
+
+                if (!isSenderAdmin && !isOwner && !isVIP) {
+                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
+                }
+
+                const qMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                const quotedText = qMsg?.conversation || 
+                                   qMsg?.extendedTextMessage?.text || 
+                                   qMsg?.imageMessage?.caption || 
+                                   qMsg?.videoMessage?.caption || '';
+
+                const directText = args.join(' ');
+                const finalHidetagText = directText || quotedText;
+
+                if (!finalHidetagText) {
+                    return sock.sendMessage(from, { text: '⚠️ Masukkan teks atau reply pesan yang ingin dijadikan hidetag!\nContoh: *.ah Pengumuman*' }, { quoted: msg });
+                }
+
+                const allMembers = participants.map(p => p.id);
+                await sock.sendMessage(from, { text: finalHidetagText, mentions: allMembers }, { quoted: msg });
+
+            } catch (err) {
+                console.error('Error Hidetag Detail:', err);
+                await sock.sendMessage(from, { text: '❌ Gagal mengeksekusi fitur hidetag.' }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR VERIFIKASI TIKTOK (.verif) - MAX 1 AKUN
+        // ==========================================
+        else if (command === '.verif' || command === '.veriftiktok' || command === '.ttverif') {
+            let db = loadDatabase();
+
+            if (db[senderNumber]) {
+                return sock.sendMessage(from, { 
+                    text: `⚠️ *GAGAL VERIFIKASI*\n\nKamu sudah memverifikasi akun TikTok *@${db[senderNumber]}*.\n\nSatu nomor WhatsApp hanya dapat memverifikasi *1 akun TikTok*. Ketik *.unverif* jika ingin mengganti.` 
+                }, { quoted: msg });
+            }
+
+            const username = args[0]?.replace('@', '');
+            if (!username) {
+                return sock.sendMessage(from, { text: '⚠️ Masukkan username TikTok!\nContoh: *.verif zann_dim*' }, { quoted: msg });
+            }
+
+            await sock.sendMessage(from, { text: `🔍 Memeriksa data akun TikTok *@${username}*...` }, { quoted: msg });
+
+            const RAPIDAPI_KEY = '62743950e0mshbfd3b40a5d4bd01p10e681jsn956f79b5b429';
+            const RAPIDAPI_HOST = 'tiktok-api23.p.rapidapi.com';
+
+            try {
+                const response = await axios.get(`https://${RAPIDAPI_HOST}/api/user/info`, {
+                    params: { uniqueId: username },
+                    headers: { 'x-rapidapi-key': RAPIDAPI_KEY, 'x-rapidapi-host': RAPIDAPI_HOST },
+                    timeout: 10000
+                });
+
+                const resData = response.data;
+                const userInfo = resData?.userInfo || resData?.data || resData || {};
+                const user = userInfo?.user || {};
+                const stats = userInfo?.stats || {};
+
+                const targetUsername = user.uniqueId || username;
+                const nickname = user.nickname || targetUsername;
+                const followers = stats.followerCount !== undefined ? Number(stats.followerCount).toLocaleString('id-ID') : '-';
+                const bio = user.signature || '-';
+                const totalVideo = stats.videoCount !== undefined ? Number(stats.videoCount).toLocaleString('id-ID') : '-';
+                const totalLikes = stats.heartCount !== undefined ? Number(stats.heartCount).toLocaleString('id-ID') : '-';
+                
+                const createTime = user.createTime 
+                    ? new Date(user.createTime * 1000).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : 'Tidak publik';
+
+                db[senderNumber] = targetUsername;
+                saveDatabase(db);
+
+                const captionText = 
+`✅ *BERHASIL TERVERIFIKASI*
+
+🎵 *INFORMASI AKUN TIKTOK*
+📛 *Display Name:* ${nickname}
+👤 *Username:* @${targetUsername}
+👥 *Follower:* ${followers}
+📝 *Bio:* ${bio}
+📅 *Since Akun:* ${createTime}
+🎥 *Total Video:* ${totalVideo}
+❤️ *Total Likes:* ${totalLikes}
+🔗 *Link:* https://www.tiktok.com/@${targetUsername}`;
+
+                const avatar = user.avatarMedium || user.avatarLarger || user.avatarThumb;
+                if (avatar) {
+                    await sock.sendMessage(from, { image: { url: avatar }, caption: captionText }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { text: captionText }, { quoted: msg });
+                }
+
+            } catch (error) {
+                console.error('RapidAPI Error:', error?.message);
+                db[senderNumber] = username;
+                saveDatabase(db);
+                await sock.sendMessage(from, { text: `🎵 *Akun TikTok:* @${username}\n🔗 https://www.tiktok.com/@${username}\n\n✅ Berhasil diverifikasi (Fallback Mode).` }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR UNVERIFIKASI (.unverif)
+        // ==========================================
+        else if (command === '.unverif') {
+            let db = loadDatabase();
+            if (!db[senderNumber]) {
+                return sock.sendMessage(from, { text: '⚠️ Kamu belum memiliki akun TikTok yang terverifikasi.' }, { quoted: msg });
+            }
+            const oldUsername = db[senderNumber];
+            delete db[senderNumber];
+            saveDatabase(db);
+            await sock.sendMessage(from, { text: `🗑️ Verifikasi untuk *@${oldUsername}* telah dihapus. Sekarang kamu bisa menggunakan *.verif* untuk akun lain.` }, { quoted: msg });
+        }
+
+        // ==========================================
+        // FITUR RPG (Role-Playing Game)
+        // ==========================================
+        else if (['rpg', 'status', 'profile', 'pilihjob', 'adventure', 'hunt', 'heal', 'leaderboard', 'toprpg'].includes(command)) {
+            let rpgDb = loadRpgDb();
+            if (!rpgDb[senderNumber]) {
+                rpgDb[senderNumber] = {
+                    name: msg.pushName || "Adventurer",
+                    job: null,
+                    level: 1,
+                    exp: 0,
+                    maxExp: 100,
+                    hp: 100,
+                    maxHp: 100,
+                    atk: 10,
+                    gold: 50,
+                    weapon: "Tangan Kosong"
+                };
+            }
+            let player = rpgDb[senderNumber];
+
+            if (command === 'rpg' || command === 'status' || command === 'profile') {
+                let txt = `⚔️ *RPG PROFILE* ⚔️\n\n` +
+                          `👤 *Nama:* ${player.name}\n` +
+                          `🛡️ *Job:* ${player.job ? player.job.toUpperCase() : 'Belum Memilih (.pilihjob)'}\n` +
+                          `⭐ *Level:* ${player.level}\n` +
+                          `✨ *EXP:* ${player.exp} / ${player.maxExp}\n` +
+                          `❤️ *HP:* ${player.hp} / ${player.maxHp}\n` +
+                          `🗡️ *Attack:* ${player.atk}\n` +
+                          `💰 *Gold:* ${player.gold}\n` +
+                          `🗡️ *Senjata:* ${player.weapon}\n\n` +
+                          `_Ketik .adventure untuk mulai berburu!_`;
+                await sock.sendMessage(from, { text: txt }, { quoted: msg });
+            } 
+            else if (command === 'pilihjob') {
+                let choice = args[0] ? args[0].toLowerCase() : '';
+                if (player.job) {
+                    return sock.sendMessage(from, { text: `⚠️ Kamu sudah memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
+                }
+
+                if (choice === 'warrior') {
+                    player.job = 'warrior';
+                    player.maxHp = 150; player.hp = 150; player.atk = 15; player.weapon = 'Pedang Kayu';
+                } else if (choice === 'mage') {
+                    player.job = 'mage';
+                    player.maxHp = 80; player.hp = 80; player.atk = 25; player.weapon = 'Tongkat Sihir Pemula';
+                } else if (choice === 'archer') {
+                    player.job = 'archer';
+                    player.maxHp = 100; player.hp = 100; player.atk = 20; player.weapon = 'Busur Kayu';
+                } else {
+                    return sock.sendMessage(from, { text: `⚔️ *PILIH JOB RPG* ⚔️\n\nKetik:\n- *.pilihjob warrior*\n- *.pilihjob mage*\n- *.pilihjob archer*` }, { quoted: msg });
+                }
+
+                saveRpgDb(rpgDb);
+                await sock.sendMessage(from, { text: `🎉 Berhasil memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
+            }
+            else if (command === 'adventure' || command === 'hunt') {
+                if (!player.job) {
+                    return sock.sendMessage(from, { text: `⚠️ Pilih job kamu dulu dengan *.pilihjob [warrior/mage/archer]*` }, { quoted: msg });
+                }
+                if (player.hp <= 30) {
+                    return sock.sendMessage(from, { text: `❤️ HP kamu terlalu rendah (${player.hp}), silakan berobat dulu dengan *.heal*!` }, { quoted: msg });
+                }
+
+                const monsters = [
+                    { name: 'Slime Hijau', hp: 30, atk: 5, expGained: 25, goldGained: 10 },
+                    { name: 'Goblin Liar', hp: 50, atk: 12, expGained: 45, goldGained: 25 },
+                    { name: 'Orc Beruntung', hp: 90, atk: 20, expGained: 80, goldGained: 50 },
+                    { name: 'Baby Dragon', hp: 150, atk: 35, expGained: 150, goldGained: 120 }
+                ];
+
+                let monster = monsters[Math.floor(Math.random() * monsters.length)];
+                let damageDealt = player.atk + Math.floor(Math.random() * 10);
+                let damageTaken = Math.max(5, monster.atk - Math.floor(Math.random() * 5));
+                
+                player.hp -= damageTaken;
+                if (player.hp < 0) player.hp = 0;
+
+                player.exp += monster.expGained;
+                player.gold += monster.goldGained;
+
+                let textResult = `🌲 Bertemu *${monster.name}*!\n- Menyerang: ${damageDealt} DMG\n- Terkena damage: -${damageTaken} HP\n\n` +
+                                 `🏆 *MENANG!*\n✨ EXP +${monster.expGained}\n💰 Gold +${monster.goldGained}\n❤️ Sisa HP: ${player.hp}/${player.maxHp}\n`;
+
+                if (player.exp >= player.maxExp) {
+                    player.level += 1;
+                    player.exp -= player.maxExp;
+                    player.maxExp += 50;
+                    player.maxHp += 20;
+                    player.hp = player.maxHp;
+                    player.atk += 5;
+                    textResult += `\n🎉 *LEVEL UP!* Kamu naik ke Level *${player.level}*!`;
+                }
+
+                saveRpgDb(rpgDb);
+                await sock.sendMessage(from, { text: textResult }, { quoted: msg });
+            }
+            else if (command === 'heal') {
+                let cost = 20;
+                if (player.gold < cost) return sock.sendMessage(from, { text: `💰 Gold kurang! Biaya heal ${cost} Gold.` }, { quoted: msg });
+                if (player.hp === player.maxHp) return sock.sendMessage(from, { text: `❤️ HP sudah penuh!` }, { quoted: msg });
+
+                player.gold -= cost;
+                player.hp = player.maxHp;
+                saveRpgDb(rpgDb);
+                await sock.sendMessage(from, { text: `🏥 Berhasil berobat seharga ${cost} Gold. HP kembali penuh!` }, { quoted: msg });
+            }
+            else if (command === 'leaderboard' || command === 'toprpg') {
+                let sorted = Object.values(rpgDb).sort((a, b) => b.level - a.level || b.gold - a.gold).slice(0, 5);
+                let text = `🏆 *TOP 5 LEADERBOARD RPG* 🏆\n\n`;
+                sorted.forEach((p, i) => {
+                    text += `${i + 1}. *${p.name}* | Lv: ${p.level} | Gold: ${p.gold} (${p.job ? p.job.toUpperCase() : 'No Job'})\n`;
+                });
+                await sock.sendMessage(from, { text: text }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR GRUP (.kick, .promote, .demote)
+        // ==========================================
+        else if (['.kick', '.promote', '.demote'].includes(command)) {
+            if (!isGroup) {
+                return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+            }
+
+            try {
+                const groupMetadata = await sock.groupMetadata(from);
+                const participants = groupMetadata.participants || [];
+                const adminParticipants = participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
+                const adminNumbers = adminParticipants.map(p => extractNumber(p.id));
+
+                const isSenderAdmin = adminNumbers.includes(senderNumber);
+
+                if (!isSenderAdmin && !isOwner) {
+                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup* atau *Owner*!' }, { quoted: msg });
+                }
+
+                let targetJid = null;
+                const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid;
+                const quotedSender = msg.message.extendedTextMessage?.contextInfo?.participant;
+
+                if (mentioned && mentioned.length > 0) {
+                    targetJid = mentioned[0];
+                } else if (quotedSender) {
+                    targetJid = quotedSender;
+                }
+
+                if (!targetJid) {
+                    return sock.sendMessage(from, { text: `⚠️ Penggunaan salah!\nContoh: *${command} @user*` }, { quoted: msg });
+                }
+
+                const targetNumber = extractNumber(targetJid);
+
+                if (command === '.kick') {
+                    await sock.groupParticipantsUpdate(from, [targetJid], 'remove');
+                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
+                } 
+                else if (command === '.promote') {
+                    await sock.groupParticipantsUpdate(from, [targetJid], 'promote');
+                    await sock.sendMessage(from, { text: `✅ Berhasil menaikkan @${targetNumber} menjadi Admin.`, mentions: [targetJid] }, { quoted: msg });
+                } 
+                else if (command === '.demote') {
+                    await sock.groupParticipantsUpdate(from, [targetJid], 'demote');
+                    await sock.sendMessage(from, { text: `✅ Berhasil menurunkan posisi Admin @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
+                }
+            } catch (err) {
+                console.error('Error Admin Feature:', err);
+                await sock.sendMessage(from, { text: '❌ Gagal mengeksekusi perintah. Pastikan bot adalah Admin Grup!' }, { quoted: msg });
             }
         }
     });
 }
 
-startBot();
+connectToWhatsApp();
