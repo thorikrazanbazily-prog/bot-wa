@@ -6,12 +6,13 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const Tiktok = require('@tobyg74/tiktok-api-dl');
 
-// LIST NOMOR YANG DIIZINKAN
+// LIST NOMOR YANG DIIZINKAN (Ubah sesuai kebutuhan)
 const listBolehKick = ['6281298697777'];
 const listBolehHidetag = ['6281298697777'];
 
-// Helper Konversi Format Angka Singkat (K / M / B)
+// Helper Konversi Format Angka Singkat (K / M / B / rb / jt)
 function formatShortNumber(num) {
     if (!num || isNaN(num)) return num || '0';
     let n = Number(num);
@@ -247,7 +248,7 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .VERIF TIKTOK (MULTI-API FALLBACK)
+            // 5. FITUR .VERIF TIKTOK (Memakai library @tobyg74/tiktok-api-dl)
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
 
@@ -261,83 +262,30 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-                    let userData = null;
+                    // Memanggil fungsi StalkUser secara lokal
+                    const res = await Tiktok.StalkUser(username);
 
-                    // Opsi 1: API Siputzx
-                    try {
-                        const res1 = await axios.get(`https://api.siputzx.my.id/api/stalk/tiktok?username=${username}`);
-                        if (res1.data?.status && res1.data?.data) {
-                            const u = res1.data.data.user;
-                            const s = res1.data.data.stats;
-                            userData = {
-                                nickname: u.nickname,
-                                username: u.uniqueId,
-                                followers: s?.followerCount,
-                                following: s?.followingCount,
-                                likes: s?.heartCount,
-                                video: s?.videoCount,
-                                bio: u.signature,
-                                avatar: u.avatarLarger || u.avatarMedium
-                            };
-                        }
-                    } catch (e) {}
-
-                    // Opsi 2: API Tiklydown (Backup 1)
-                    if (!userData) {
-                        try {
-                            const res2 = await axios.get(`https://api.tiklydown.eu.org/api/download?url=https://www.tiktok.com/@${username}`);
-                            if (res2.data?.author) {
-                                const a = res2.data.author;
-                                userData = {
-                                    nickname: a.name,
-                                    username: a.unique_id,
-                                    followers: a.stats?.followerCount,
-                                    following: a.stats?.followingCount,
-                                    likes: a.stats?.heartCount,
-                                    video: a.stats?.videoCount,
-                                    bio: a.signature,
-                                    avatar: a.avatar
-                                };
-                            }
-                        } catch (e) {}
-                    }
-
-                    // Opsi 3: API VKRDown (Backup 2)
-                    if (!userData) {
-                        try {
-                            const res3 = await axios.get(`https://api.vkrdown.com/tiktok/user.php?username=${username}`);
-                            if (res3.data?.status === 'success' || res3.data?.user) {
-                                const u = res3.data.user || res3.data;
-                                userData = {
-                                    nickname: u.nickname || u.name,
-                                    username: u.uniqueId || u.username,
-                                    followers: u.followerCount || u.followers,
-                                    following: u.followingCount || u.following,
-                                    likes: u.heartCount || u.hearts || u.likes,
-                                    video: u.videoCount || u.videos,
-                                    bio: u.signature || u.bio,
-                                    avatar: u.avatarLarger || u.avatar || u.pp
-                                };
-                            }
-                        } catch (e) {}
-                    }
-
-                    if (!userData) {
-                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan atau semua server API sedang dibatasi/down.' }, { quoted: msg });
+                    if (res?.status !== 'success' || !res?.result) {
+                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan atau gagal mengambil data profil!' }, { quoted: msg });
                         return;
                     }
 
-                    let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
-                    teks += `👤 *Nama:* ${userData.nickname || '-'}\n`;
-                    teks += `🆔 *Username:* @${userData.username || username}\n`;
-                    teks += `👥 *Pengikut:* ${formatShortNumber(userData.followers)}\n`;
-                    teks += `➡️ *Mengikuti:* ${formatShortNumber(userData.following)}\n`;
-                    teks += `❤️ *Total Suka:* ${formatShortNumber(userData.likes)}\n`;
-                    teks += `📹 *Total Video:* ${userData.video || 0}\n`;
-                    teks += `📝 *Bio:* ${userData.bio || '-'}\n`;
+                    const user = res.result.users;
+                    const stats = res.result.stats;
 
-                    if (userData.avatar) {
-                        await sock.sendMessage(from, { image: { url: userData.avatar }, caption: teks }, { quoted: msg });
+                    let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
+                    teks += `👤 *Nama:* ${user.nickname || '-'}\n`;
+                    teks += `🆔 *Username:* @${user.uniqueId || username}\n`;
+                    teks += `👥 *Pengikut:* ${formatShortNumber(stats?.followerCount)}\n`;
+                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats?.followingCount)}\n`;
+                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats?.heartCount)}\n`;
+                    teks += `📹 *Total Video:* ${stats?.videoCount || 0}\n`;
+                    teks += `📝 *Bio:* ${user.signature || '-'}\n`;
+
+                    const avatar = user.avatarLarger || user.avatarMedium || user.avatarThumb;
+
+                    if (avatar) {
+                        await sock.sendMessage(from, { image: { url: avatar }, caption: teks }, { quoted: msg });
                     } else {
                         await sock.sendMessage(from, { text: teks }, { quoted: msg });
                     }
@@ -345,7 +293,7 @@ async function startBot() {
                 } catch (err) {
                     console.error('Error verif TikTok:', err.message);
                     await sock.sendMessage(from, { 
-                        text: '❌ Gagal mengecek akun TikTok. Pastikan username benar.' 
+                        text: '❌ Terjadi kesalahan saat mengambil data akun TikTok.' 
                     }, { quoted: msg });
                 }
             }
