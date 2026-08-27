@@ -5,6 +5,13 @@ const pino = require('pino');
 // LIST NOMOR OWNER (Ganti dengan nomormu)
 const ownerNumber = ['6281298697777'];
 
+// LIST NOMOR YANG DIIZINKAN MENGGUNAKAN FITUR .KICK (Selain Owner)
+// Masukkan nomor dengan awalan 62 tanpa tanda + atau spasi
+const allowedKickUsers = [
+    '6281234567890', // Contoh nomor 1 yang boleh kick
+    '6289876543210'  // Contoh nomor 2 yang boleh kick (tambahkan atau hapus sesuai kebutuhan)
+];
+
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
 
@@ -47,6 +54,9 @@ async function startBot() {
                 const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
                 const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
 
+                // Pengecekan apakah pengirim ada di daftar yang diizinkan menggunakan kick
+                const isAllowedKick = allowedKickUsers.includes(senderNumber);
+
                 const body = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
                 const pesan = body.trim();
                 if (!pesan.startsWith('.')) continue;
@@ -55,7 +65,7 @@ async function startBot() {
                 const args = pesan.split(' ').slice(1);
 
                 // ==========================================
-                // FITUR .KICK (Khusus Admin Grup & Owner)
+                // FITUR .KICK (Hanya User Pilihan, Admin, & Owner)
                 // ==========================================
                 if (command === '.kick') {
                     if (!isGroup) {
@@ -63,14 +73,15 @@ async function startBot() {
                         return;
                     }
 
+                    // Validasi: Hanya Owner, atau User dalam daftar izin, atau Admin Grup yang boleh pakai
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
-                    if (!isAdmin && !isOwner) {
-                        await sock.sendMessage(from, { text: '❌ Perintah ini hanya dapat digunakan oleh *Admin Grup*!' }, { quoted: msg });
+                    if (!isOwner && !isAllowedKick && !isAdmin) {
+                        await sock.sendMessage(from, { text: '❌ Maaf, kamu tidak memiliki izin untuk menggunakan perintah ini!' }, { quoted: msg });
                         return;
                     }
 
@@ -79,8 +90,6 @@ async function startBot() {
 
                     const botPart = participants.find(p => p.id.replace(/[^0-9]/g, '').includes(botNumber));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
-
-                    console.log('Status Bot Admin:', isBotAdmin, botPart);
 
                     if (!isBotAdmin) {
                         await sock.sendMessage(from, { text: '❌ Gagal! Bot harus dijadikan *Admin Grup* terlebih dahulu.' }, { quoted: msg });
