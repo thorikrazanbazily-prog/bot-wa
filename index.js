@@ -263,8 +263,8 @@ async function startBot() {
                         return;
                     }
 
-                    const botJidNormalized = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                    const botPart = participants.find(p => p.id === sock.user.id || p.id === botJidNormalized || p.id.startsWith(sock.user.id.split('@')[0]));
+                    const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
+                    const botPart = participants.find(p => p.id === botJid || p.id === sock.user.id || p.id.startsWith(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
