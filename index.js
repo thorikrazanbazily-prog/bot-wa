@@ -11,9 +11,6 @@ const { exec } = require('child_process');
 const listBolehKick = ['6281298697777'];
 const listBolehHidetag = ['6281298697777'];
 
-// STORAGE ABSENSI SEMENTARA (MEMORI MEMORY)
-const dbAbsen = {};
-
 // Helper Konversi Format Angka Singkat
 function formatShortNumber(num) {
     if (!num || isNaN(num)) return num || '0';
@@ -263,6 +260,47 @@ async function startBot() {
                 }
             }
 
+            // FITUR .VERIF TIKTOK
+else if (command === '.verif') {
+    const username = args[0]?.replace('@', '');
+
+    if (!username) {
+        await sock.sendMessage(from, { 
+            text: '⚠️ Harap masukkan username TikTok!\n\nContoh:\n*.verif tiktok*' 
+        }, { quoted: msg });
+        return;
+    }
+
+    try {
+        await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
+
+        // Contoh mengambil data via API publik 
+        const res = await axios.get(`https://api.lolhuman.xyz/api/tiktok/user/${username}?apikey=GANTIPAKAIAPIKEYMU`);
+        const result = res.data.result;
+
+        let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
+        teks += `👤 *Nama:* ${result.nickname}\n`;
+        teks += `🆔 *Username:* @${result.username}\n`;
+        teks += `👥 *Pengikut:* ${formatShortNumber(result.followers)}\n`;
+        teks += `➡️ *Mengikuti:* ${formatShortNumber(result.following)}\n`;
+        teks += `❤️ *Suka:* ${formatShortNumber(result.likes)}\n`;
+        teks += `🎬 *Total Video:* ${result.video}\n`;
+        teks += `📝 *Bio:* ${result.bio || '-'}\n`;
+
+        // Kirim foto profil beserta detail teksnya
+        await sock.sendMessage(from, { 
+            image: { url: result.user_picture }, 
+            caption: teks 
+        }, { quoted: msg });
+
+    } catch (err) {
+        console.error('Error verif TikTok:', err);
+        await sock.sendMessage(from, { 
+            text: '❌ Username TikTok tidak ditemukan atau terjadi kesalahan server.' 
+        }, { quoted: msg });
+    }
+}
+
             // 5. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
@@ -301,98 +339,6 @@ async function startBot() {
                 } catch (err) {
                     console.error('Error kick:', err);
                     await sock.sendMessage(from, { text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' }, { quoted: msg });
-                }
-            }
-
-            // 6. FITUR .ABSEN
-            else if (command === '.absen') {
-                if (!isGroup) {
-                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
-                    return;
-                }
-
-                const subCmd = args[0] ? args[0].toLowerCase() : '';
-
-                // MEMULAI ABSEN BARU
-                if (subCmd === 'mulai') {
-                    const judulAbsen = args.slice(1).join(' ').trim() || 'Absen Anggota Grup';
-                    dbAbsen[from] = {
-                        judul: judulAbsen,
-                        peserta: []
-                    };
-
-                    let teks = `📋 *ABSENSI DIBUKA*\n\n`;
-                    teks += `*Judul:* ${judulAbsen}\n\n`;
-                    teks += `Ketik *.absen hadir* untuk mengisi absen.\n`;
-                    teks += `Ketik *.absen cek* untuk melihat daftar hadir.\n`;
-                    teks += `Ketik *.absen hapus* untuk menutup sesi absen.`;
-
-                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
-                }
-
-                // ISI HADIR ABSEN
-                else if (subCmd === 'hadir') {
-                    if (!dbAbsen[from]) {
-                        await sock.sendMessage(from, { text: '❌ Belum ada sesi absen yang dibuka di grup ini.\nKetik *.absen mulai [judul]* untuk membuat.' }, { quoted: msg });
-                        return;
-                    }
-
-                    if (dbAbsen[from].peserta.includes(rawSender)) {
-                        await sock.sendMessage(from, { text: `⚠️ Kamu sudah terdaftar dalam absen!` }, { quoted: msg });
-                        return;
-                    }
-
-                    dbAbsen[from].peserta.push(rawSender);
-
-                    let teks = `✅ *@${senderNumber}* berhasil absen!\n\n`;
-                    teks += `📌 *${dbAbsen[from].judul}*\n`;
-                    teks += `👥 Total Hadir: *${dbAbsen[from].peserta.length} orang*`;
-
-                    await sock.sendMessage(from, { text: teks, mentions: [rawSender] }, { quoted: msg });
-                }
-
-                // CEK DAFTAR ABSEN
-                else if (subCmd === 'cek') {
-                    if (!dbAbsen[from]) {
-                        await sock.sendMessage(from, { text: '❌ Tidak ada sesi absen yang sedang berlangsung.' }, { quoted: msg });
-                        return;
-                    }
-
-                    let teks = `📋 *DAFTAR HADIR ABSENSI*\n`;
-                    teks += `📌 *Judul:* ${dbAbsen[from].judul}\n`;
-                    teks += `👥 *Total Hadir:* ${dbAbsen[from].peserta.length}\n\n`;
-
-                    if (dbAbsen[from].peserta.length === 0) {
-                        teks += `_Belum ada yang mengisi absen._`;
-                    } else {
-                        dbAbsen[from].peserta.forEach((userJid, idx) => {
-                            teks += `${idx + 1}. @${userJid.split('@')[0]}\n`;
-                        });
-                    }
-
-                    await sock.sendMessage(from, { text: teks, mentions: dbAbsen[from].peserta }, { quoted: msg });
-                }
-
-                // HAPUS/TUTUP ABSEN
-                else if (subCmd === 'hapus' || subCmd === 'tutup') {
-                    if (!dbAbsen[from]) {
-                        await sock.sendMessage(from, { text: '❌ Tidak ada sesi absen yang aktif untuk dihapus.' }, { quoted: msg });
-                        return;
-                    }
-
-                    delete dbAbsen[from];
-                    await sock.sendMessage(from, { text: '🗑️ Sesi absensi berhasil ditutup dan dihapus!' }, { quoted: msg });
-                }
-
-                // PANDUAN CARA PAKAI
-                else {
-                    let teks = `📋 *PANDUAN FITUR ABSEN*\n\n`;
-                    teks += `• *.absen mulai [judul]* : Membuka absen baru\n`;
-                    teks += `• *.absen hadir* : Mengisi daftar hadir\n`;
-                    teks += `• *.absen cek* : Melihat daftar yang sudah hadir\n`;
-                    teks += `• *.absen hapus* : Menutup/menghapus sesi absen`;
-
-                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
                 }
             }
         }
