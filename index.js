@@ -462,6 +462,42 @@ async function startBot() {
                 await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
             }
         }
+
+            // FITUR .GETIP (Cek Informasi IP / Domain)
+            else if (command === '.getip') {
+                const targetIp = args[0];
+                if (!targetIp) {
+                    await sock.sendMessage(from, { text: '⚠️ Masukkan alamat IP atau Domain web yang ingin dicek!\nContoh: `.getip 8.8.8.8` atau `.getip google.com`' }, { quoted: msg });
+                    return;
+                }
+
+                try {
+                    await sock.sendMessage(from, { text: `🔍 Sedang melacak informasi untuk: *${targetIp}*...` }, { quoted: msg });
+
+                    const response = await axios.get(`http://ip-api.com/json/${targetIp}?fields=status,message,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query`);
+                    const data = response.data;
+
+                    if (data.status === 'fail') {
+                        await sock.sendMessage(from, { text: `❌ Gagal melacak IP/Domain. Pesan: ${data.message}` }, { quoted: msg });
+                        return;
+                    }
+
+                    let teks = `🌐 *INFORMASI IP / DOMAIN* 🌐\n\n`;
+                    teks += `• *IP/Host:* ${data.query}\n`;
+                    teks += `• *Negara:* ${data.country} (${data.countryCode})\n`;
+                    teks += `• *Wilayah/Provinsi:* ${data.regionName}\n`;
+                    teks += `• *Kota:* ${data.city} (${data.zip})\n`;
+                    teks += `• *ISP:* ${data.isp}\n`;
+                    teks += `• *Organisasi:* ${data.org || '-'}\n`;
+                    teks += `• *Zona Waktu:* ${data.timezone}\n`;
+                    teks += `• *Koordinat:* ${data.lat}, ${data.lon}\n`;
+
+                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
+                } catch (err) {
+                    console.error('Error getip:', err);
+                    await sock.sendMessage(from, { text: '❌ Terjadi kesalahan saat mengambil data IP.' }, { quoted: msg });
+                }
+            }
     });
 }
 
