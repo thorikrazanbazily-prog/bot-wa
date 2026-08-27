@@ -68,6 +68,7 @@ async function startBot() {
                 // Safe check pesan
                 if (!msg.message || msg.key.fromMe) continue;
 
+
                 const from = msg.key.remoteJid;
                 const isGroup = from.endsWith('@g.us');
                 const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
