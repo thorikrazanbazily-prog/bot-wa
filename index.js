@@ -80,42 +80,53 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
     });
 }
 
-// FUNGSI CEK TIKTOK STALK UNTUK VERIFIKASI
-async function cekTiktok(username) {
-    const cleanUser = encodeURIComponent(username.replace('@', '').trim());
+// FUNGSI TIKTOK STALK BARU (DENGAN USER-AGENT & HYBRID FALLBACK)
+async function tiktokStalk(username) {
+    const cleanUsername = username.replace(/^@/, '').trim();
+    if (!cleanUsername) return { status: false };
 
-    // API 1: TikWM (Sangat detail untuk data Like/Heart & Follower)
+    // API 1: TikWM (Public Endpoint dengan User-Agent Custom)
     try {
-        const res = await axios.get(`https://tikwm.com/api/user/info?unique_id=${cleanUser}`, { timeout: 10000 });
-        if (res.data && res.data.code === 0 && res.data.data) {
-            const u = res.data.data.user;
-            const s = res.data.data.stats;
+        const response = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=@${cleanUsername}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+            },
+            timeout: 10000
+        });
+
+        const res = response.data;
+        if (res.code === 0 && res.data) {
+            const user = res.data.user;
+            const stats = res.data.stats;
+
             return {
                 status: true,
-                nickname: u.nickname || username,
-                username: u.unique_id || username,
-                avatar: u.avatar_larger || u.avatar_medium,
-                followers: formatShortNumber(s.followerCount),
-                likes: formatShortNumber(s.heartCount || s.heart || 0)
+                username: user.uniqueId,
+                followers: formatShortNumber(stats.followerCount),
+                likes: formatShortNumber(stats.heartCount || stats.heart || 0),
+                avatar: user.avatarLarger || user.avatarMedium
             };
         }
-    } catch (err) {}
+    } catch (e) {
+        console.error('Error TikWM API:', e.message);
+    }
 
     // API 2: Vreden API Fallback
     try {
-        const response = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${cleanUser}`, { timeout: 10000 });
+        const response = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${encodeURIComponent(cleanUsername)}`, { timeout: 10000 });
         if (response.data && response.data.result) {
             const result = response.data.result;
             return {
                 status: true,
-                nickname: result.nickname || username,
-                username: result.username || username,
-                avatar: result.avatar || result.profile || result.avatarLarger,
+                username: result.username || cleanUsername,
                 followers: formatShortNumber(result.followers || result.follower),
-                likes: formatShortNumber(result.likes || result.heart || 0)
+                likes: formatShortNumber(result.likes || result.heart || 0),
+                avatar: result.avatar || result.profile || result.avatarLarger
             };
         }
-    } catch (error) {}
+    } catch (error) {
+        console.error('Error Vreden API:', error.message);
+    }
 
     return { status: false };
 }
@@ -356,7 +367,7 @@ async function startBot() {
                     // Pesan Tunggu
                     await sock.sendMessage(from, { text: '⏳ *Sedang memverifikasi data akun TikTok...*' }, { quoted: msg });
 
-                    const dataTikTok = await cekTiktok(cleanUser);
+                    const dataTikTok = await tiktokStalk(cleanUser);
 
                     if (dataTikTok.status) {
                         // Caption persis tampilan screenshot
@@ -374,7 +385,7 @@ async function startBot() {
                                 body: "🛒 2009 item\nChangli MD",
                                 mediaType: 1,
                                 renderLargerThumbnail: false,
-                                thumbnailUrl: "https://files.catbox.moe/k3u6y7.jpg", // Menggunakan foto karakter Anime/Changli
+                                thumbnailUrl: "https://files.catbox.moe/k3u6y7.jpg",
                                 sourceUrl: "https://whatsapp.com"
                             }
                         };
