@@ -33,7 +33,6 @@ async function startBot() {
         }
     });
 
-    // DI SINILAH FUNGSI ASYNC BERADA
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
 
@@ -75,9 +74,15 @@ async function startBot() {
                         return;
                     }
 
-                    const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                    const botPart = participants.find(p => p.id === botJid || p.id === sock.user.id || p.id.startsWith(sock.user.id.split('@')[0]));
+                    // Mengambil nomor bersih bot tanpa tambahan kode perangkat (:1)
+                    const botNumber = sock.user.id.split(':')[0].replace(/[^0-9]/g, '');
+                    
+                    // Mencari peserta yang nomornya cocok dengan bot
+                    const botPart = participants.find(p => p.id.replace(/[^0-9]/g, '').startsWith(botNumber));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
+
+                    // (Opsional) Biar kamu bisa lihat di terminal kenapa dia gagal/berhasil
+                    console.log('Status Bot Admin:', isBotAdmin, botPart);
 
                     if (!isBotAdmin) {
                         await sock.sendMessage(from, { text: '❌ Gagal! Bot harus dijadikan *Admin Grup* terlebih dahulu.' }, { quoted: msg });
