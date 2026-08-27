@@ -228,10 +228,10 @@ async function startBot() {
                     let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
                     menuText += `• \`.ping\` - Cek kecepatan bot\n`;
                     menuText += `• \`.listmem\` - Daftar member grup\n`;
-                    menuText += `• \`.kick @user\` - Mengeluarkan member dari grup (Admin Grup)\n`;
+                    menuText += `• \`.kick @user\` - Mengeluarkan member (*Khusus Admin Grup*)\n`;
                     menuText += `• \`.ban\` - Ban member (Owner)\n`;
                     menuText += `• \`.ceksider\` - Cek anggota yang tidak pernah chat\n`;
-                    menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
+                    menuText += `• \`.kicksider\` - Kick otomatis anggota sider (*Khusus Admin Grup*)\n`;
                     menuText += `• \`.private\` - Ubah bot ke mode privat (Owner)\n`;
                     menuText += `• \`.public\` / \`.publik\` - Ubah bot ke mode publik (Owner)\n`;
                     menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
@@ -244,7 +244,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: menuText }, { quoted: msg });
                 }
 
-                // 5. FITUR .KICK
+                // 5. FITUR .KICK (Dikhususkan Hanya untuk Admin Grup & Owner)
                 else if (command === '.kick') {
                     if (!isGroup) {
                         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -257,6 +257,7 @@ async function startBot() {
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
+                    // Validasi Ketat: Hanya Admin Grup atau Owner yang boleh eksekusi kick
                     if (!isAdmin && !isOwner) {
                         await sock.sendMessage(from, { text: '❌ Perintah ini hanya dapat digunakan oleh *Admin Grup*!' }, { quoted: msg });
                         return;
