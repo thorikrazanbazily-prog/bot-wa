@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage, jidNormalizedUser } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const sharp = require('sharp');
@@ -12,8 +12,6 @@ const ownerNumber = ['6281298697777'];
 
 // File untuk mencatat aktivitas member (Sider Detector)
 const activityFile = path.join(__dirname, 'group_activity.json');
-
-// File untuk menyimpan status mode bot (Private / Public)
 const modeFile = path.join(__dirname, 'bot_mode.json');
 
 function getBotMode() {
@@ -32,17 +30,16 @@ function setBotMode(mode) {
     fs.writeFileSync(modeFile, JSON.stringify({ mode }, null, 2));
 }
 
-// Helper Simpan Aktivitas Member
 function trackActivity(groupId, senderId) {
     if (!groupId || !senderId) return;
+    const cleanSender = jidNormalizedUser(senderId);
     let activity = fs.existsSync(activityFile) ? JSON.parse(fs.readFileSync(activityFile)) : {};
     if (!activity[groupId]) activity[groupId] = {};
     
-    activity[groupId][senderId] = Date.now();
+    activity[groupId][cleanSender] = Date.now();
     fs.writeFileSync(activityFile, JSON.stringify(activity, null, 2));
 }
 
-// Helper Konversi Foto ke Stiker ber-Exif (Watermark)
 async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'WhatsApp Bot') {
     const webpBuffer = await sharp(buffer)
         .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
@@ -124,15 +121,15 @@ async function startBot() {
                 const from = msg.key.remoteJid;
                 const isGroup = from.endsWith('@g.us');
 
+                // Normalisasi JID pengirim agar tidak bermasalah dengan multi-device
                 const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
-                const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
+                const senderJid = jidNormalizedUser(rawSender);
+                const senderNumber = senderJid.split('@')[0];
                 const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
 
-                // Cek Mode Bot (Private / Public)
+                // Cek Mode Bot
                 const botMode = getBotMode();
-                if (botMode === 'private' && !isOwner) {
-                    return; // Abaikan pesan dari non-owner jika mode private
-                }
+                if (botMode === 'private' && !isOwner) return;
 
                 // Cek Banned User
                 const banFile = path.join(__dirname, 'banned.json');
@@ -140,7 +137,7 @@ async function startBot() {
                 if (banned.includes(senderNumber)) return;
 
                 if (isGroup) {
-                    trackActivity(from, rawSender);
+                    trackActivity(from, senderJid);
                 }
 
                 const body = msg.message.conversation || 
@@ -200,7 +197,11 @@ async function startBot() {
                     let mediaToDownload;
                     if (isQuotedImage || isQuotedSticker) {
                         mediaToDownload = {
-                            key: { remoteJid: from, id: msg.message.extendedTextMessage.contextInfo.stanzaId, participant: msg.message.extendedTextMessage.contextInfo.participant },
+                            key: { 
+                                remoteJid: from, 
+                                id: msg.message.extendedTextMessage.contextInfo.stanzaId, 
+                                participant: msg.message.extendedTextMessage.contextInfo.participant 
+                            },
                             message: quoted
                         };
                     } else {
@@ -244,7 +245,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: menuText }, { quoted: msg });
                 }
 
-                // 5. FITUR .KICK (Dikhususkan Hanya untuk Admin Grup & Owner)
+                // 5. FITUR .KICK (SUDAH DIPERBAIKI)
                 else if (command === '.kick') {
                     if (!isGroup) {
                         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -253,18 +254,18 @@ async function startBot() {
 
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
-                    
-                    const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
+
+                    // Perbandingan JID yang dinormalisasi
+                    const participant = participants.find(p => jidNormalizedUser(p.id) === senderJid);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
-                    // Validasi Ketat: Hanya Admin Grup atau Owner yang boleh eksekusi kick
                     if (!isAdmin && !isOwner) {
                         await sock.sendMessage(from, { text: '❌ Perintah ini hanya dapat digunakan oleh *Admin Grup*!' }, { quoted: msg });
                         return;
                     }
 
-                    const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                    const botPart = participants.find(p => p.id === botJid || p.id === sock.user.id || p.id.startsWith(sock.user.id.split('@')[0]));
+                    const botJid = jidNormalizedUser(sock.user.id);
+                    const botPart = participants.find(p => jidNormalizedUser(p.id) === botJid);
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
@@ -272,15 +273,26 @@ async function startBot() {
                         return;
                     }
 
-                    let targetUser = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
+                    let rawTarget = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
+                                    msg.message.extendedTextMessage?.contextInfo?.participant;
                     
-                    if (!targetUser) {
-                        await sock.sendMessage(from, { text: '⚠️ Silakan tag atau reply orang yang ingin dikeluarkan dari grup!' }, { quoted: msg });
+                    if (!rawTarget && args[0]) {
+                        rawTarget = args[0].replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+                    }
+
+                    if (!rawTarget) {
+                        await sock.sendMessage(from, { text: '⚠️ Silakan tag, reply, atau sertakan nomor orang yang ingin dikeluarkan!' }, { quoted: msg });
                         return;
                     }
 
-                    await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
-                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
+                    const targetUser = jidNormalizedUser(rawTarget);
+
+                    try {
+                        await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
+                        await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
+                    } catch (e) {
+                        await sock.sendMessage(from, { text: `❌ Gagal mengeluarkan member. Pastikan posisi bot lebih tinggi dari target.` }, { quoted: msg });
+                    }
                 }
 
                 // 6. FITUR .PRIVATE & .PUBLIC
@@ -326,7 +338,7 @@ async function startBot() {
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
 
-                    const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
+                    const participant = participants.find(p => jidNormalizedUser(p.id) === senderJid);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
                     if (command === '.kicksider' && !isAdmin && !isOwner) {
@@ -337,10 +349,12 @@ async function startBot() {
                     let activity = fs.existsSync(activityFile) ? JSON.parse(fs.readFileSync(activityFile)) : {};
                     let groupAct = activity[from] || {};
 
+                    const botJid = jidNormalizedUser(sock.user.id);
                     let siders = [];
                     participants.forEach(mem => {
-                        if (!groupAct[mem.id] && mem.id !== sock.user.id && mem.id.endsWith('@s.whatsapp.net')) {
-                            siders.push(mem.id);
+                        const memJid = jidNormalizedUser(mem.id);
+                        if (!groupAct[memJid] && memJid !== botJid) {
+                            siders.push(memJid);
                         }
                     });
 
@@ -358,8 +372,7 @@ async function startBot() {
                         });
                         await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
                     } else if (command === '.kicksider') {
-                        const botJidNormalized = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-                        const botPart = participants.find(p => p.id === sock.user.id || p.id === botJidNormalized || p.id.startsWith(sock.user.id.split('@')[0]));
+                        const botPart = participants.find(p => jidNormalizedUser(p.id) === botJid);
                         const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                         if (!isBotAdmin) {
@@ -418,7 +431,7 @@ async function startBot() {
                     }
                 }
 
-                // 10. FITUR .HD (UPSCALE 2X LIPAT)
+                // 10. FITUR .HD
                 else if (command === '.hd') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -455,7 +468,7 @@ async function startBot() {
                     await sock.sendMessage(from, { image: enhancedBuffer, caption: '✅ Berhasil upscale foto menjadi 2x lipat (HD)!' }, { quoted: msg });
                 }
 
-                // 11. FITUR .HDVIDEO (UPSCALE VIDEO 2X LIPAT)
+                // 11. FITUR .HDVIDEO
                 else if (command === '.hdvideo' || command === '.reminivideo') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
