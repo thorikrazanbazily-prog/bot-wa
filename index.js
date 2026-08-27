@@ -11,7 +11,10 @@ const { exec } = require('child_process');
 const listBolehKick = ['6281298697777'];
 const listBolehHidetag = ['6281298697777'];
 
-// Helper Konversi Format Angka Singkat (contoh: 1400 -> 1,4 rb, 233000 -> 233 rb)
+// STORAGE ABSENSI SEMENTARA (MEMORI MEMORY)
+const dbAbsen = {};
+
+// Helper Konversi Format Angka Singkat
 function formatShortNumber(num) {
     if (!num || isNaN(num)) return num || '0';
     let n = Number(num);
@@ -78,57 +81,6 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
                 reject(err);
             });
     });
-}
-
-// FUNGSI TIKTOK STALK BARU (DENGAN USER-AGENT & HYBRID FALLBACK)
-async function tiktokStalk(username) {
-    const cleanUsername = username.replace(/^@/, '').trim();
-    if (!cleanUsername) return { status: false };
-
-    // API 1: TikWM (Public Endpoint dengan User-Agent Custom)
-    try {
-        const response = await axios.get(`https://www.tikwm.com/api/user/info?unique_id=@${cleanUsername}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-            },
-            timeout: 10000
-        });
-
-        const res = response.data;
-        if (res.code === 0 && res.data) {
-            const user = res.data.user;
-            const stats = res.data.stats;
-
-            return {
-                status: true,
-                username: user.uniqueId,
-                followers: formatShortNumber(stats.followerCount),
-                likes: formatShortNumber(stats.heartCount || stats.heart || 0),
-                avatar: user.avatarLarger || user.avatarMedium
-            };
-        }
-    } catch (e) {
-        console.error('Error TikWM API:', e.message);
-    }
-
-    // API 2: Vreden API Fallback
-    try {
-        const response = await axios.get(`https://api.vreden.web.id/api/tiktokstalk?username=${encodeURIComponent(cleanUsername)}`, { timeout: 10000 });
-        if (response.data && response.data.result) {
-            const result = response.data.result;
-            return {
-                status: true,
-                username: result.username || cleanUsername,
-                followers: formatShortNumber(result.followers || result.follower),
-                likes: formatShortNumber(result.likes || result.heart || 0),
-                avatar: result.avatar || result.profile || result.avatarLarger
-            };
-        }
-    } catch (error) {
-        console.error('Error Vreden API:', error.message);
-    }
-
-    return { status: false };
 }
 
 async function startBot() {
@@ -352,65 +304,95 @@ async function startBot() {
                 }
             }
 
-            // 6. FITUR .VERIF (DESAIN SESUAI SCREENSHOT)
-            else if (command === '.verif' || command === '.verifikasi') {
-                try {
-                    const usernameInput = args.join(' ').trim();
+            // 6. FITUR .ABSEN
+            else if (command === '.absen') {
+                if (!isGroup) {
+                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    return;
+                }
 
-                    if (!usernameInput) {
-                        await sock.sendMessage(from, { text: `⚠️ *Format Verifikasi Salah!*\n\nContoh:\n*.verif moenzyy7*` }, { quoted: msg });
+                const subCmd = args[0] ? args[0].toLowerCase() : '';
+
+                // MEMULAI ABSEN BARU
+                if (subCmd === 'mulai') {
+                    const judulAbsen = args.slice(1).join(' ').trim() || 'Absen Anggota Grup';
+                    dbAbsen[from] = {
+                        judul: judulAbsen,
+                        peserta: []
+                    };
+
+                    let teks = `📋 *ABSENSI DIBUKA*\n\n`;
+                    teks += `*Judul:* ${judulAbsen}\n\n`;
+                    teks += `Ketik *.absen hadir* untuk mengisi absen.\n`;
+                    teks += `Ketik *.absen cek* untuk melihat daftar hadir.\n`;
+                    teks += `Ketik *.absen hapus* untuk menutup sesi absen.`;
+
+                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
+                }
+
+                // ISI HADIR ABSEN
+                else if (subCmd === 'hadir') {
+                    if (!dbAbsen[from]) {
+                        await sock.sendMessage(from, { text: '❌ Belum ada sesi absen yang dibuka di grup ini.\nKetik *.absen mulai [judul]* untuk membuat.' }, { quoted: msg });
                         return;
                     }
 
-                    const cleanUser = usernameInput.replace('@', '');
-                    
-                    // Pesan Tunggu
-                    await sock.sendMessage(from, { text: '⏳ *Sedang memverifikasi data akun TikTok...*' }, { quoted: msg });
-
-                    const dataTikTok = await tiktokStalk(cleanUser);
-
-                    if (dataTikTok.status) {
-                        // Caption persis tampilan screenshot
-                        let caption = `✅ *Verifikasi Berhasil!*\n`;
-                        caption += `--------------------------------------------------\n`;
-                        caption += `• Username: @${dataTikTok.username}\n`;
-                        caption += `• Follower: ${dataTikTok.followers}\n`;
-                        caption += `• Like: ${dataTikTok.likes}\n`;
-                        caption += `--------------------------------------------------`;
-
-                        // ContextInfo untuk Header WhatsApp Card (Changli MD / AdReply Header)
-                        const contextInfo = {
-                            externalAdReply: {
-                                title: "WhatsApp  • Status",
-                                body: "🛒 2009 item\nChangli MD",
-                                mediaType: 1,
-                                renderLargerThumbnail: false,
-                                thumbnailUrl: "https://files.catbox.moe/k3u6y7.jpg",
-                                sourceUrl: "https://whatsapp.com"
-                            }
-                        };
-
-                        if (dataTikTok.avatar) {
-                            await sock.sendMessage(from, {
-                                image: { url: dataTikTok.avatar },
-                                caption: caption,
-                                contextInfo: contextInfo
-                            }, { quoted: msg });
-                        } else {
-                            await sock.sendMessage(from, {
-                                text: caption,
-                                contextInfo: contextInfo
-                            }, { quoted: msg });
-                        }
-                    } else {
-                        await sock.sendMessage(from, { 
-                            text: `❌ *Gagal mengambil data akun TikTok "${cleanUser}".*\nPastikan username benar dan tidak di-private.` 
-                        }, { quoted: msg });
+                    if (dbAbsen[from].peserta.includes(rawSender)) {
+                        await sock.sendMessage(from, { text: `⚠️ Kamu sudah terdaftar dalam absen!` }, { quoted: msg });
+                        return;
                     }
 
-                } catch (err) {
-                    console.error('Error verif:', err);
-                    await sock.sendMessage(from, { text: '❌ Terjadi kesalahan sistem saat verifikasi.' }, { quoted: msg });
+                    dbAbsen[from].peserta.push(rawSender);
+
+                    let teks = `✅ *@${senderNumber}* berhasil absen!\n\n`;
+                    teks += `📌 *${dbAbsen[from].judul}*\n`;
+                    teks += `👥 Total Hadir: *${dbAbsen[from].peserta.length} orang*`;
+
+                    await sock.sendMessage(from, { text: teks, mentions: [rawSender] }, { quoted: msg });
+                }
+
+                // CEK DAFTAR ABSEN
+                else if (subCmd === 'cek') {
+                    if (!dbAbsen[from]) {
+                        await sock.sendMessage(from, { text: '❌ Tidak ada sesi absen yang sedang berlangsung.' }, { quoted: msg });
+                        return;
+                    }
+
+                    let teks = `📋 *DAFTAR HADIR ABSENSI*\n`;
+                    teks += `📌 *Judul:* ${dbAbsen[from].judul}\n`;
+                    teks += `👥 *Total Hadir:* ${dbAbsen[from].peserta.length}\n\n`;
+
+                    if (dbAbsen[from].peserta.length === 0) {
+                        teks += `_Belum ada yang mengisi absen._`;
+                    } else {
+                        dbAbsen[from].peserta.forEach((userJid, idx) => {
+                            teks += `${idx + 1}. @${userJid.split('@')[0]}\n`;
+                        });
+                    }
+
+                    await sock.sendMessage(from, { text: teks, mentions: dbAbsen[from].peserta }, { quoted: msg });
+                }
+
+                // HAPUS/TUTUP ABSEN
+                else if (subCmd === 'hapus' || subCmd === 'tutup') {
+                    if (!dbAbsen[from]) {
+                        await sock.sendMessage(from, { text: '❌ Tidak ada sesi absen yang aktif untuk dihapus.' }, { quoted: msg });
+                        return;
+                    }
+
+                    delete dbAbsen[from];
+                    await sock.sendMessage(from, { text: '🗑️ Sesi absensi berhasil ditutup dan dihapus!' }, { quoted: msg });
+                }
+
+                // PANDUAN CARA PAKAI
+                else {
+                    let teks = `📋 *PANDUAN FITUR ABSEN*\n\n`;
+                    teks += `• *.absen mulai [judul]* : Membuka absen baru\n`;
+                    teks += `• *.absen hadir* : Mengisi daftar hadir\n`;
+                    teks += `• *.absen cek* : Melihat daftar yang sudah hadir\n`;
+                    teks += `• *.absen hapus* : Menutup/menghapus sesi absen`;
+
+                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
                 }
             }
         }
