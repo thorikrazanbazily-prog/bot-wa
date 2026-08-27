@@ -6,7 +6,6 @@ const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const Tiktok = require('@tobyg74/tiktok-api-dl');
 
 // LIST NOMOR YANG DIIZINKAN (Ubah sesuai kebutuhan)
 const listBolehKick = ['6281298697777'];
@@ -248,9 +247,10 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .VERIF TIKTOK (Memakai library @tobyg74/tiktok-api-dl)
+            // 5. FITUR .VERIF TIKTOK (Menggunakan API Key BetaBotz: Btz-L6YG6)
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
+                const apikey = 'Btz-L6YG6'; // API Key BetaBotz milikmu
 
                 if (!username) {
                     await sock.sendMessage(from, { 
@@ -262,27 +262,29 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-                    // Memanggil fungsi StalkUser secara lokal
-                    const res = await Tiktok.StalkUser(username);
+                    const response = await axios.get(`https://api.betabotz.eu.org/api/stalk/tiktok?username=${username}&apikey=${apikey}`).catch(() => null);
 
-                    if (res?.status !== 'success' || !res?.result) {
-                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan atau gagal mengambil data profil!' }, { quoted: msg });
+                    if (!response || !response.data || response.data.status !== 200 || !response.data.result) {
+                        await sock.sendMessage(from, { 
+                            text: '❌ Akun TikTok tidak ditemukan atau terjadi kesalahan pada server API!' 
+                        }, { quoted: msg });
                         return;
                     }
 
-                    const user = res.result.users;
-                    const stats = res.result.stats;
+                    const data = response.data.result;
+                    const user = data.user || data;
+                    const stats = data.stats || data;
 
                     let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
-                    teks += `👤 *Nama:* ${user.nickname || '-'}\n`;
-                    teks += `🆔 *Username:* @${user.uniqueId || username}\n`;
-                    teks += `👥 *Pengikut:* ${formatShortNumber(stats?.followerCount)}\n`;
-                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats?.followingCount)}\n`;
-                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats?.heartCount)}\n`;
-                    teks += `📹 *Total Video:* ${stats?.videoCount || 0}\n`;
-                    teks += `📝 *Bio:* ${user.signature || '-'}\n`;
+                    teks += `👤 *Nama:* ${user.nickname || user.name || '-'}\n`;
+                    teks += `🆔 *Username:* @${user.uniqueId || user.username || username}\n`;
+                    teks += `👥 *Pengikut:* ${formatShortNumber(stats.followerCount || stats.followers)}\n`;
+                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats.followingCount || stats.following)}\n`;
+                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats.heartCount || stats.likes)}\n`;
+                    teks += `📹 *Total Video:* ${stats.videoCount || stats.videos || 0}\n`;
+                    teks += `📝 *Bio:* ${user.signature || user.bio || '-'}\n`;
 
-                    const avatar = user.avatarLarger || user.avatarMedium || user.avatarThumb;
+                    const avatar = user.avatarLarger || user.avatar || user.pp;
 
                     if (avatar) {
                         await sock.sendMessage(from, { image: { url: avatar }, caption: teks }, { quoted: msg });
@@ -293,7 +295,7 @@ async function startBot() {
                 } catch (err) {
                     console.error('Error verif TikTok:', err.message);
                     await sock.sendMessage(from, { 
-                        text: '❌ Terjadi kesalahan saat mengambil data akun TikTok.' 
+                        text: '❌ Terjadi kesalahan saat memproses data akun TikTok.' 
                     }, { quoted: msg });
                 }
             }
