@@ -260,50 +260,61 @@ async function startBot() {
                 }
             }
 
-            // FITUR .VERIF TIKTOK
-else if (command === '.verif') {
-    const username = args[0] ? args[0].replace('@', '') : '';
+                                    // 5. FITUR .VERIF TIKTOK
+            else if (command === '.verif') {
+                const username = args[0] ? args[0].replace('@', '') : '';
 
-    if (!username) {
-        await sock.sendMessage(from, { 
-            text: '⚠️ Harap masukkan username TikTok!\n\nContoh:\n*.verif tiktok*' 
-        }, { quoted: msg });
-        return;
-    }
+                if (!username) {
+                    await sock.sendMessage(from, { 
+                        text: '⚠️ Harap masukkan username TikTok!\n\nContoh:\n*.verif tiktok*' 
+                    }, { quoted: msg });
+                    return;
+                }
 
-    try {
-        await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
+                try {
+                    await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-        // Menggunakan API publik gratis tanpa API key
-        const res = await axios.get(`https://api.vhtear.com/tiktokdl?link=https://www.tiktok.com/@${username}`); 
-        // Catatan: Jika menggunakan API downloader/scraper publik lain, sesuaikan URL-nya di sini.
-        
-        const data = res.data.result; // Menyesuaikan struktur JSON dari API publik
+                    // API Scraper TikTok Publik Gratis & Aktif
+                    const res = await axios.get(`https://deliriussapi-official.vercel.app/tools/tiktokstalk?q=${username}`);
+                    
+                    if (!res.data || !res.data.status || !res.data.result) {
+                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan!' }, { quoted: msg });
+                        return;
+                    }
 
-        let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
-        teks += `👤 *Nama:* ${data.nickname || '-'}\n`;
-        teks += `🆔 *Username:* @${username}\n`;
-        teks += `👥 *Pengikut:* ${data.follower || '0'}\n`;
-        teks += `➡️ *Mengikuti:* ${data.following || '0'}\n`;
-        teks += `❤️ *Suka:* ${data.like || '0'}\n`;
-        teks += `📝 *Bio:* ${data.desc || '-'}\n`;
+                    const data = res.data.result.users;
+                    const stats = res.data.result.stats;
 
-                await sock.sendMessage(from, { 
-            image: { url: data.avatar || data.thumb }, 
-            caption: teks 
-        }, { quoted: msg });
+                    let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
+                    teks += `👤 *Nama:* ${data.nickname || '-'}\n`;
+                    teks += `🆔 *Username:* @${data.uniqueId || username}\n`;
+                    teks += `👥 *Pengikut:* ${formatShortNumber(stats.followerCount)}\n`;
+                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats.followingCount)}\n`;
+                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats.heartCount)}\n`;
+                    teks += `📹 *Total Video:* ${stats.videoCount || 0}\n`;
+                    teks += `📝 *Bio:* ${data.signature || '-'}\n`;
 
-    } catch (err) {
-        console.error('Error verif TikTok:', err);
-        await sock.sendMessage(from, { 
-            text: '❌ Gagal mengambil data akun TikTok. Pastikan username benar.' 
-        }, { quoted: msg });
-    }
-}
+                    await sock.sendMessage(from, { 
+                        image: { url: data.avatarLarger || data.avatarMedium }, 
+                        caption: teks 
+                    }, { quoted: msg });
 
-// 5. FITUR .KICK
-else if (command === '.kick') {
+                    return;
 
+                } catch (err) {
+                    console.error('Error verif TikTok:', err);
+                    await sock.sendMessage(from, { 
+                        text: '❌ Gagal mengambil data akun TikTok. Pastikan username benar.' 
+                    }, { quoted: msg });
+                    return;
+                }
+            }
+
+
+
+            // 6. FITUR .KICK
+            else if (command === '.kick') {
+                if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
                     return;
                 }
@@ -341,6 +352,7 @@ else if (command === '.kick') {
                     await sock.sendMessage(from, { text: '❌ Gagal mengeluarkan member. Pastikan **Bot sudah diangkat menjadi Admin grup**!' }, { quoted: msg });
                 }
             }
+        }
     });
 }
 
