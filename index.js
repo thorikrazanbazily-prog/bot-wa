@@ -1,13 +1,9 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const axios = require('axios');
-const sharp = require('sharp');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
 
-// LIST NOMOR YANG DIIZINKAN (Ubah sesuai kebutuhan)
+// LIST NOMOR YANG DIIZINKAN UNTUK KICK & HIDETAG (Ubah sesuai nomor WhatsApp kamu)
 const listBolehKick = ['6281298697777'];
 const listBolehHidetag = ['6281298697777'];
 
@@ -21,50 +17,6 @@ function formatShortNumber(num) {
         return (n / 1000).toFixed(1).replace('.', ',').replace(',0', '') + ' rb';
     }
     return n.toString();
-}
-
-// Helper Konversi Foto / Stiker Ke Stiker Ber-Watermark Exif (Memakai Sharp)
-async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot WhatsApp') {
-    const webpBuffer = await sharp(buffer)
-        .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .toFormat('webp')
-        .toBuffer();
-
-    const tmpOutput = path.join(__dirname, `tmp_${Date.now()}.webp`);
-    const tmpExif = path.join(__dirname, `tmp_${Date.now()}.exif`);
-    const tmpFinal = path.join(__dirname, `tmp_final_${Date.now()}.webp`);
-
-    fs.writeFileSync(tmpOutput, webpBuffer);
-
-    const json = {
-        'sticker-pack-id': 'Bot WhatsApp',
-        'sticker-pack-name': packname,
-        'sticker-pack-publisher': author,
-        'emojis': ['🤖']
-    };
-
-    let exifHeader = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
-    let jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
-    let exif = Buffer.concat([exifHeader, jsonBuffer]);
-    exif.writeUIntLE(jsonBuffer.length, 14, 4);
-    fs.writeFileSync(tmpExif, exif);
-
-    return new Promise((resolve) => {
-        exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
-            let finalBuf;
-            if (!err && fs.existsSync(tmpFinal)) {
-                finalBuf = fs.readFileSync(tmpFinal);
-            } else {
-                finalBuf = fs.readFileSync(tmpOutput);
-            }
-
-            if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
-            if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
-            if (fs.existsSync(tmpFinal)) fs.unlinkSync(tmpFinal);
-
-            resolve(finalBuf);
-        });
-    });
 }
 
 async function startBot() {
@@ -118,72 +70,8 @@ async function startBot() {
             const command = pesan.toLowerCase().split(' ')[0];
             const args = pesan.split(' ').slice(1);
 
-            // 1. FITUR .PING
-            if (command === '.ping') {
-                const latency = Date.now() - (msg.messageTimestamp * 1000);
-                const speed = latency < 0 ? 0 : latency;
-                await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${speed} ms*` }, { quoted: msg });
-            } 
-
-            // 2. FITUR .STIKER / .S / .WM
-            else if (command === '.stiker' || command === '.s' || command === '.wm') {
-                try {
-                    const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
-                    const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
-
-                    const isImage = msg.message.imageMessage;
-                    const isQuotedImage = typeQuoted === 'imageMessage';
-                    const isSticker = msg.message.stickerMessage;
-                    const isQuotedSticker = typeQuoted === 'stickerMessage';
-
-                    if (!isImage && !isQuotedImage && !isSticker && !isQuotedSticker) {
-                        await sock.sendMessage(from, { 
-                            text: '⚠️ Kirim foto/stiker atau reply foto/stiker dengan perintah:\n- *.stiker*\n- *.wm NamaStiker*' 
-                        }, { quoted: msg });
-                        return;
-                    }
-
-                    let mediaToDownload;
-                    if (isQuotedImage || isQuotedSticker) {
-                        mediaToDownload = {
-                            key: {
-                                remoteJid: from,
-                                id: msg.message.extendedTextMessage.contextInfo.stanzaId,
-                                participant: msg.message.extendedTextMessage.contextInfo.participant
-                            },
-                            message: quoted
-                        };
-                    } else {
-                        mediaToDownload = msg;
-                    }
-
-                    let packname = 'Bot Stiker';
-                    let author = 'Bot WhatsApp';
-
-                    if (command === '.wm') {
-                        const fullText = args.join(' ').trim();
-                        if (fullText.includes('|')) {
-                            const splitText = fullText.split('|');
-                            packname = splitText[0].trim() || 'Bot Stiker';
-                            author = splitText[1].trim() || 'Bot WhatsApp';
-                        } else if (fullText) {
-                            packname = fullText;
-                            author = 'Bot WhatsApp';
-                        }
-                    }
-
-                    const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
-                    const stickerBuffer = await imageToSticker(buffer, packname, author);
-
-                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error stiker/wm:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal membuat stiker dengan watermark.' }, { quoted: msg });
-                }
-            }
-
-            // 3. FITUR .HIDETAG / .H
-            else if (command === '.hidetag' || command === '.h') {
+            // 1. FITUR .HIDETAG / .H
+            if (command === '.hidetag' || command === '.h') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
                     return;
@@ -223,38 +111,15 @@ async function startBot() {
                 }
             }
 
-            // 4. FITUR .LISTMEM
-            else if (command === '.listmem') {
-                if (!isGroup) {
-                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
-                    return;
-                }
-                try {
-                    const groupMetadata = await sock.groupMetadata(from);
-                    const participants = groupMetadata.participants;
-
-                    let teksBalas = `📋 *DAFTAR MEMBER GRUP*\n👥 Total: *${participants.length} Member*\n\n`;
-                    let mentions = [];
-
-                    for (let mem of participants) {
-                        teksBalas += `@${mem.id.split('@')[0]}\n`;
-                        mentions.push(mem.id);
-                    }
-
-                    await sock.sendMessage(from, { text: teksBalas, mentions: mentions }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error listmem:', err);
-                }
-            }
-
-            // 5. FITUR .VERIF TIKTOK (Menggunakan API Key BetaBotz: Btz-L6YG6)
+            // 2. FITUR .VERIF TIKTOK (Menggunakan API Key Buatan Sendiri / Server Lokal)
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
-                const apikey = 'Btz-L6YG6'; // API Key BetaBotz milikmu
+                const apikey = 'apikey-kamu-123'; // Ganti dengan API Key buatanmu
+                const apiUrl = `http://localhost:3000/api/stalk/tiktok?username=${username}&apikey=${apikey}`;
 
                 if (!username) {
                     await sock.sendMessage(from, { 
-                        text: '⚠️ Harap masukkan username TikTok!\n\nContoh:\n*.verif tiktok*' 
+                        text: '⚠️ Harap masukkan username TikTok!\n\nContoh:\n*.verif username*' 
                     }, { quoted: msg });
                     return;
                 }
@@ -262,35 +127,25 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-                    const response = await axios.get(`https://api.betabotz.eu.org/api/stalk/tiktok?username=${username}&apikey=${apikey}`).catch(() => null);
+                    const response = await axios.get(apiUrl).catch(() => null);
 
                     if (!response || !response.data || response.data.status !== 200 || !response.data.result) {
                         await sock.sendMessage(from, { 
-                            text: '❌ Akun TikTok tidak ditemukan atau terjadi kesalahan pada server API!' 
+                            text: '❌ Gagal mengambil data dari server API (Pastikan API Key atau server aktif)!' 
                         }, { quoted: msg });
                         return;
                     }
 
                     const data = response.data.result;
-                    const user = data.user || data;
-                    const stats = data.stats || data;
 
                     let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
-                    teks += `👤 *Nama:* ${user.nickname || user.name || '-'}\n`;
-                    teks += `🆔 *Username:* @${user.uniqueId || user.username || username}\n`;
-                    teks += `👥 *Pengikut:* ${formatShortNumber(stats.followerCount || stats.followers)}\n`;
-                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats.followingCount || stats.following)}\n`;
-                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats.heartCount || stats.likes)}\n`;
-                    teks += `📹 *Total Video:* ${stats.videoCount || stats.videos || 0}\n`;
-                    teks += `📝 *Bio:* ${user.signature || user.bio || '-'}\n`;
+                    teks += `👤 *Nama:* ${data.nickname || '-'}\n`;
+                    teks += `🆔 *Username:* @${data.username || username}\n`;
+                    teks += `👥 *Pengikut:* ${formatShortNumber(data.followers)}\n`;
+                    teks += `❤️ *Total Suka:* ${formatShortNumber(data.likes)}\n`;
+                    teks += `📝 *Bio:* ${data.bio || '-'}\n`;
 
-                    const avatar = user.avatarLarger || user.avatar || user.pp;
-
-                    if (avatar) {
-                        await sock.sendMessage(from, { image: { url: avatar }, caption: teks }, { quoted: msg });
-                    } else {
-                        await sock.sendMessage(from, { text: teks }, { quoted: msg });
-                    }
+                    await sock.sendMessage(from, { text: teks }, { quoted: msg });
 
                 } catch (err) {
                     console.error('Error verif TikTok:', err.message);
@@ -300,7 +155,7 @@ async function startBot() {
                 }
             }
 
-            // 6. FITUR .GETIP
+            // 3. FITUR .GETIP
             else if (command === '.getip') {
                 try {
                     const ipRes = await axios.get('https://api.ipify.org?format=json');
@@ -310,7 +165,7 @@ async function startBot() {
                 }
             }
 
-            // 7. FITUR .KICK
+            // 4. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
