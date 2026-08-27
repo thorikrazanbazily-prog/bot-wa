@@ -11,7 +11,7 @@ const { exec } = require('child_process');
 const listBolehKick = ['6281298697777'];
 const listBolehHidetag = ['6281298697777'];
 
-// Helper Konversi Format Angka Singkat
+// Helper Konversi Format Angka Singkat (K / M / B)
 function formatShortNumber(num) {
     if (!num || isNaN(num)) return num || '0';
     let n = Number(num);
@@ -260,7 +260,7 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .VERIF TIKTOK (API Multi-Fallbacks & Stabil)
+            // 5. FITUR .VERIF TIKTOK (API Multi-Fallbacks)
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
 
