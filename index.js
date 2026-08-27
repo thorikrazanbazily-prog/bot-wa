@@ -220,7 +220,7 @@ async function startBot() {
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
             }
 
-            // 5. FITUR .KICK (Khusus Admin Grup)
+            // 5. FITUR .KICK (Khusus Admin Grup) - Menggunakan Live Metadata Refresh
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -228,9 +228,11 @@ async function startBot() {
                 }
 
                 try {
+                    // 1. Ambil data terbaru langsung dari server WhatsApp (bypass cache)
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
+                    // 2. Cek apakah pengirim perintah adalah admin atau owner
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
@@ -239,8 +241,11 @@ async function startBot() {
                         return;
                     }
 
+                    // 3. Cek apakah bot sudah jadi admin dengan pencocokan JID yang fleksibel
                     const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                    const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
+                    const botNumberOnly = sock.user.id.split('@')[0].split(':')[0];
+                    
+                    const botPart = participants.find(p => p.id === botJid || p.id.startsWith(botNumberOnly));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
@@ -248,6 +253,7 @@ async function startBot() {
                         return;
                     }
 
+                    // 4. Ambil target yang akan di-kick (mention atau reply)
                     let targetUser = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
                     
                     if (!targetUser) {
@@ -255,6 +261,7 @@ async function startBot() {
                         return;
                     }
 
+                    // 5. Eksekusi kick
                     await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
                     await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
                 } catch (err) {
@@ -262,6 +269,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot dan kamu adalah admin grup.' }, { quoted: msg });
                 }
             }
+
 
             // 6. FITUR .BAN
             else if (command === '.ban') {
