@@ -2,7 +2,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, download
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const axios = require('axios');
-const ffmpeg = require('fluent-ffmpeg');
+const sharp = require('sharp');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
@@ -23,14 +23,18 @@ function formatShortNumber(num) {
     return n.toString();
 }
 
-// Helper Konversi Foto / Stiker Ke Stiker Ber-Watermark Exif
+// Helper Konversi Foto / Stiker Ke Stiker Ber-Watermark Exif (Memakai Sharp)
 async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot WhatsApp') {
-    const tmpInput = path.join(__dirname, `tmp_${Date.now()}.jpg`);
+    const webpBuffer = await sharp(buffer)
+        .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .toFormat('webp')
+        .toBuffer();
+
     const tmpOutput = path.join(__dirname, `tmp_${Date.now()}.webp`);
     const tmpExif = path.join(__dirname, `tmp_${Date.now()}.exif`);
     const tmpFinal = path.join(__dirname, `tmp_final_${Date.now()}.webp`);
-    
-    fs.writeFileSync(tmpInput, buffer);
+
+    fs.writeFileSync(tmpOutput, webpBuffer);
 
     const json = {
         'sticker-pack-id': 'Bot WhatsApp',
@@ -46,37 +50,20 @@ async function imageToSticker(buffer, packname = 'Bot Stiker', author = 'Bot Wha
     fs.writeFileSync(tmpExif, exif);
 
     return new Promise((resolve, reject) => {
-        ffmpeg(tmpInput)
-            .outputOptions([
-                '-vcodec libwebp',
-                '-vf scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-ih)/2:(oh-ih)/2:color=0x00000000'
-            ])
-            .toFormat('webp')
-            .save(tmpOutput)
-            .on('end', () => {
-                exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
-                    let finalBuf;
-                    if (!err && fs.existsSync(tmpFinal)) {
-                        finalBuf = fs.readFileSync(tmpFinal);
-                    } else {
-                        finalBuf = fs.readFileSync(tmpOutput);
-                    }
+        exec(`webpmux -set exif ${tmpExif} ${tmpOutput} -o ${tmpFinal}`, (err) => {
+            let finalBuf;
+            if (!err && fs.existsSync(tmpFinal)) {
+                finalBuf = fs.readFileSync(tmpFinal);
+            } else {
+                finalBuf = fs.readFileSync(tmpOutput);
+            }
 
-                    if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
-                    if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
-                    if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
-                    if (fs.existsSync(tmpFinal)) fs.unlinkSync(tmpFinal);
+            if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
+            if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
+            if (fs.existsSync(tmpFinal)) fs.unlinkSync(tmpFinal);
 
-                    resolve(finalBuf);
-                });
-            })
-            .on('error', (err) => {
-                if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput);
-                if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput);
-                if (fs.existsSync(tmpExif)) fs.unlinkSync(tmpExif);
-                if (fs.existsSync(tmpFinal)) fs.unlinkSync(tmpFinal);
-                reject(err);
-            });
+            resolve(finalBuf);
+        });
     });
 }
 
@@ -260,7 +247,7 @@ async function startBot() {
                 }
             }
 
-            // 5. FITUR .VERIF TIKTOK (API Multi-Fallbacks)
+            // 5. FITUR .VERIF TIKTOK
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
 
@@ -274,11 +261,9 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-                    // API Scraper TikTok Utama
                     const res = await axios.get(`https://api.lolhuman.xyz/api/stalktiktok/${username}?apikey=GataDios`).catch(() => null);
 
                     if (!res || !res.data || res.data.status !== 200) {
-                        // Backup API jika API Utama gagal
                         const resBackup = await axios.get(`https://deliriussapi-official.vercel.app/tools/tiktokstalk?q=${username}`).catch(() => null);
                         
                         if (resBackup?.data?.status && resBackup?.data?.result) {
