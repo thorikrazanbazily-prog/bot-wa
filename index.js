@@ -7,7 +7,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const axios = require('axios');
 
-// LIST NOMOR OWNER / YANG DIIZINKAN (Hanya dideklarasikan sekali di sini)
+// LIST NOMOR OWNER / YANG DIIZINKAN
 const ownerNumber = ['6281298697777'];
 
 // File untuk mencatat aktivitas member (Sider Detector)
@@ -108,7 +108,6 @@ async function startBot() {
             const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
             const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
 
-            // Catat aktivitas pesan untuk fitur Ceksider
             if (isGroup) {
                 trackActivity(from, rawSender);
             }
@@ -213,7 +212,8 @@ async function startBot() {
                 menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
                 menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
                 menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
-                menuText += `• \`.hd\` - Memperjelas kualitas foto (Reply foto)\n`;
+                menuText += `• \`.hd\` - Memperjelas kualitas foto / Remini (Reply foto)\n`;
+                menuText += `• \`.hdvideo\` - Memperjelas resolusi video (Reply video)\n`;
                 menuText += `• \`.getip <ip/domain>\` - Cek informasi IP / Domain\n`;
                 menuText += `• \`.rpg\` - Berburu monster RPG\n`;
 
@@ -373,24 +373,35 @@ async function startBot() {
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
                     const base64Image = buffer.toString('base64');
                     
-                    const apiRes = await axios.post('https://api.betabotz.eu.org/api/tools/removebg', {
-                        image: `data:image/jpeg;base64,${base64Image}`,
-                        apikey: 'Btz-L6YG6'
-                    });
+                    // Menggunakan API publik alternatif yang bebas IP whitelist
+                    const apiRes = await axios.post('https://api.vhtear.com/removebg', {
+                        image: base64Image
+                    }).catch(() => null);
 
-                    if (apiRes.data && apiRes.data.result) {
-                        await sock.sendMessage(from, { image: { url: apiRes.data.result }, caption: '✅ Background berhasil dihapus!' }, { quoted: msg });
+                    // Fallback ke endpoint umum jika API utama gagal
+                    let imageUrl = apiRes?.data?.result;
+                    if (!imageUrl) {
+                        // Menggunakan alternatif endpoint telusuri base64
+                        const altRes = await axios.post('https://api.betabotz.eu.org/api/tools/removebg', {
+                            image: `data:image/jpeg;base64,${base64Image}`,
+                            apikey: 'Btz-L6YG6'
+                        });
+                        imageUrl = altRes.data?.result;
+                    }
+
+                    if (imageUrl) {
+                        await sock.sendMessage(from, { image: { url: imageUrl }, caption: '✅ Background berhasil dihapus!' }, { quoted: msg });
                     } else {
-                        await sock.sendMessage(from, { text: '❌ Server API removebg tidak mengembalikan hasil.' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '❌ Gagal memproses removebg dari server API.' }, { quoted: msg });
                     }
                 } catch (err) {
                     const errorMsg = err.response?.data?.message || err.message;
-                    console.error('Error detail .removebg:', err.response?.data || err.message);
+                    console.error('Error detail .removebg:', err);
                     await sock.sendMessage(from, { text: `❌ Gagal removebg.\nDetail Error: ${errorMsg}` }, { quoted: msg });
                 }
             }
 
-            // 9. FITUR .HD
+            // 9. FITUR .HD (Enhance Foto)
             else if (command === '.hd') {
                 try {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -428,12 +439,56 @@ async function startBot() {
                     }
                 } catch (err) {
                     const errorMsg = err.response?.data?.message || err.message;
-                    console.error('Error detail .hd:', err.response?.data || err.message);
-                    await sock.sendMessage(from, { text: `❌ Gagal memperjelas foto.\nDetail Error: ${errorMsg}` }, { quoted: msg });
+                    console.error('Error detail .hd:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal memperjelas foto.\nDetail Error: ${errorMsg}\n\n*Catatan:* Jika terkendala IP whitelist, pastikan mendaftarkan IP Anda di panel API provider.` }, { quoted: msg });
                 }
             }
 
-            // 10. FITUR .GETIP
+            // 10. FITUR .HDVIDEO (Memperjelas Video)
+            else if (command === '.hdvideo' || command === '.reminivideo') {
+                try {
+                    const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
+                    const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
+                    const isVideo = msg.message.videoMessage || typeQuoted === 'videoMessage';
+
+                    if (!isVideo) {
+                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply video dengan caption *.hdvideo* untuk meningkatkan kualitasnya!' }, { quoted: msg });
+                        return;
+                    }
+
+                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan resolusi video... Proses ini mungkin memakan waktu lebih lama.' }, { quoted: msg });
+
+                    let mediaToDownload = quoted ? {
+                        key: { 
+                            remoteJid: from, 
+                            id: msg.message.extendedTextMessage.contextInfo.stanzaId, 
+                            participant: msg.message.extendedTextMessage.contextInfo.participant 
+                        },
+                        message: quoted
+                    } : msg;
+
+                    const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
+                    const base64Video = buffer.toString('base64');
+
+                    // Request API Upscale Video
+                    const apiRes = await axios.post('https://api.betabotz.eu.org/api/tools/reminivideo', {
+                        video: `data:video/mp4;base64,${base64Video}`,
+                        apikey: 'Btz-L6YG6'
+                    });
+
+                    if (apiRes.data && apiRes.data.result) {
+                        await sock.sendMessage(from, { video: { url: apiRes.data.result }, caption: '✅ Video berhasil ditingkatkan kualitasnya (HD)!' }, { quoted: msg });
+                    } else {
+                        await sock.sendMessage(from, { text: '❌ Server API video tidak mengembalikan hasil.' }, { quoted: msg });
+                    }
+                } catch (err) {
+                    const errorMsg = err.response?.data?.message || err.message;
+                    console.error('Error detail .hdvideo:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal memperjelas video.\nDetail Error: ${errorMsg}` }, { quoted: msg });
+                }
+            }
+
+            // 11. FITUR .GETIP
             else if (command === '.getip') {
                 const targetIp = args[0];
                 if (!targetIp) {
@@ -469,7 +524,7 @@ async function startBot() {
                 }
             }
 
-            // 11. FITUR RPG
+            // 12. FITUR RPG
             else if (command === '.rpg' || command === '.hunt') {
                 const rpgFile = path.join(__dirname, 'rpg_users.json');
                 let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
