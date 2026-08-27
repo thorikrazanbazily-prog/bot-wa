@@ -112,7 +112,7 @@ async function startBot() {
                 // Cek Banned User
                 const banFile = path.join(__dirname, 'banned.json');
                 let banned = fs.existsSync(banFile) ? JSON.parse(fs.readFileSync(banFile)) : [];
-                if (banned.includes(senderNumber)) return; // Abaikan pesan dari user yang dibanned
+                if (banned.includes(senderNumber)) return;
 
                 if (isGroup) {
                     trackActivity(from, rawSender);
@@ -209,15 +209,15 @@ async function startBot() {
                     menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
                     menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
                     menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
-                    menuText += `• \`.hd\` - Mempertajam foto secara lokal (Reply foto)\n`;
-                    menuText += `• \`.hdvideo\` - Memperjelas resolusi video (Reply video)\n`;
+                    menuText += `• \`.hd\` - Upscale foto 2x lipat (Reply foto)\n`;
+                    menuText += `• \`.hdvideo\` - Upscale video 2x lipat (Reply video)\n`;
                     menuText += `• \`.getip <ip/domain>\` - Cek informasi IP / Domain\n`;
                     menuText += `• \`.rpg\` - Berburu monster RPG\n`;
 
                     await sock.sendMessage(from, { text: menuText }, { quoted: msg });
                 }
 
-                // 5. FITUR .KICK
+                // 5. FITUR .KICK (Perbaikan Validasi Admin Bot)
                 else if (command === '.kick') {
                     if (!isGroup) {
                         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -235,8 +235,8 @@ async function startBot() {
                         return;
                     }
 
-                    const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                    const botPart = participants.find(p => p.id === botJid || p.id.startsWith(sock.user.id.split('@')[0]));
+                    const botJidNormalized = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                    const botPart = participants.find(p => p.id === sock.user.id || p.id === botJidNormalized || p.id.startsWith(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
@@ -311,8 +311,8 @@ async function startBot() {
                         });
                         await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
                     } else if (command === '.kicksider') {
-                        const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                        const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
+                        const botJidNormalized = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                        const botPart = participants.find(p => p.id === sock.user.id || p.id === botJidNormalized || p.id.startsWith(sock.user.id.split('@')[0]));
                         const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                         if (!isBotAdmin) {
@@ -349,8 +349,8 @@ async function startBot() {
                     let mediaToDownload = quoted ? {
                         key: { 
                             remoteJid: from, 
-                            id: msg.message.extendedTextMessage.contextInfo.stanzaId, 
-                            participant: msg.message.extendedTextMessage.contextInfo.participant 
+                            id: msg.message.extendedTextMessage?.contextInfo?.stanzaId, 
+                            participant: msg.message.extendedTextMessage?.contextInfo?.participant 
                         },
                         message: quoted
                     } : msg;
@@ -371,7 +371,7 @@ async function startBot() {
                     }
                 }
 
-                // 9. FITUR .HD
+                // 9. FITUR .HD (UPSCALE 2X LIPAT)
                 else if (command === '.hd') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -382,28 +382,34 @@ async function startBot() {
                         return;
                     }
 
-                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan kualitas foto...' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '⏳ Sedang melakukan upscale foto 2x lipat...' }, { quoted: msg });
 
                     let mediaToDownload = quoted ? {
                         key: { 
                             remoteJid: from, 
-                            id: msg.message.extendedTextMessage.contextInfo.stanzaId, 
-                            participant: msg.message.extendedTextMessage.contextInfo.participant 
+                            id: msg.message.extendedTextMessage?.contextInfo?.stanzaId, 
+                            participant: msg.message.extendedTextMessage?.contextInfo?.participant 
                         },
                         message: quoted
                     } : msg;
 
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
+                    
+                    // Ambil ukuran asli gambar lalu kalikan 2 untuk resolusi upscale
+                    const imageMetadata = await sharp(buffer).metadata();
+                    const targetWidth = (imageMetadata.width || 800) * 2;
+
                     const enhancedBuffer = await sharp(buffer)
+                        .resize({ width: targetWidth, fit: 'contain' })
                         .sharpen()
                         .modulate({ brightness: 1.05, saturation: 1.1 })
-                        .toFormat('jpeg', { quality: 95 })
+                        .toFormat('jpeg', { quality: 100 })
                         .toBuffer();
 
-                    await sock.sendMessage(from, { image: enhancedBuffer, caption: '✅ Foto berhasil di-enhance (HD Lokal)!' }, { quoted: msg });
+                    await sock.sendMessage(from, { image: enhancedBuffer, caption: '✅ Berhasil upscale foto menjadi 2x lipat (HD)!' }, { quoted: msg });
                 }
 
-                // 10. FITUR .HDVIDEO
+                // 10. FITUR .HDVIDEO (UPSCALE VIDEO 2X LIPAT)
                 else if (command === '.hdvideo' || command === '.reminivideo') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -414,13 +420,13 @@ async function startBot() {
                         return;
                     }
 
-                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan resolusi video...' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '⏳ Sedang memproses upscale resolusi video 2x lipat...' }, { quoted: msg });
 
                     let mediaToDownload = quoted ? {
                         key: { 
                             remoteJid: from, 
-                            id: msg.message.extendedTextMessage.contextInfo.stanzaId, 
-                            participant: msg.message.extendedTextMessage.contextInfo.participant 
+                            id: msg.message.extendedTextMessage?.contextInfo?.stanzaId, 
+                            participant: msg.message.extendedTextMessage?.contextInfo?.participant 
                         },
                         message: quoted
                     } : msg;
@@ -430,13 +436,14 @@ async function startBot() {
 
                     const apiRes = await axios.post('https://api.betabotz.eu.org/api/tools/reminivideo', {
                         video: `data:video/mp4;base64,${base64Video}`,
+                        scale: 2, // Permintaan upscale 2x lipat
                         apikey: 'Btz-L6YG6'
                     }).catch(() => null);
 
                     if (apiRes && apiRes.data && apiRes.data.result) {
-                        await sock.sendMessage(from, { video: { url: apiRes.data.result }, caption: '✅ Video berhasil ditingkatkan kualitasnya (HD)!' }, { quoted: msg });
+                        await sock.sendMessage(from, { video: { url: apiRes.data.result }, caption: '✅ Berhasil upscale video 2x lipat (HD)!' }, { quoted: msg });
                     } else {
-                        await sock.sendMessage(from, { text: '❌ Server API video gagal merespon.' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '❌ Server API video gagal merespon atau batas limit tercapai.' }, { quoted: msg });
                     }
                 }
 
