@@ -74,14 +74,12 @@ async function startBot() {
                         return;
                     }
 
-                    // Mengambil nomor bersih bot tanpa tambahan kode perangkat (:1)
-                    const botNumber = sock.user.id.split(':')[0].replace(/[^0-9]/g, '');
-                    
-                    // Mencari peserta yang nomornya cocok dengan bot
-                    const botPart = participants.find(p => p.id.replace(/[^0-9]/g, '').startsWith(botNumber));
+                    const botJid = sock.user?.id || '';
+                    const botNumber = botJid.split(':')[0].replace(/[^0-9]/g, '');
+
+                    const botPart = participants.find(p => p.id.replace(/[^0-9]/g, '').includes(botNumber));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
-                    // (Opsional) Biar kamu bisa lihat di terminal kenapa dia gagal/berhasil
                     console.log('Status Bot Admin:', isBotAdmin, botPart);
 
                     if (!isBotAdmin) {
