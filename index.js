@@ -260,7 +260,7 @@ async function startBot() {
                 }
             }
 
-                                    // 5. FITUR .VERIF TIKTOK
+            // 5. FITUR .VERIF TIKTOK (API Multi-Fallbacks & Stabil)
             else if (command === '.verif') {
                 const username = args[0] ? args[0].replace('@', '') : '';
 
@@ -274,43 +274,69 @@ async function startBot() {
                 try {
                     await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-                    // API Scraper TikTok Publik Gratis & Aktif
-                    const res = await axios.get(`https://deliriussapi-official.vercel.app/tools/tiktokstalk?q=${username}`);
-                    
-                    if (!res.data || !res.data.status || !res.data.result) {
-                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan!' }, { quoted: msg });
+                    // API Scraper TikTok Utama
+                    const res = await axios.get(`https://api.lolhuman.xyz/api/stalktiktok/${username}?apikey=GataDios`).catch(() => null);
+
+                    if (!res || !res.data || res.data.status !== 200) {
+                        // Backup API jika API Utama gagal
+                        const resBackup = await axios.get(`https://deliriussapi-official.vercel.app/tools/tiktokstalk?q=${username}`).catch(() => null);
+                        
+                        if (resBackup?.data?.status && resBackup?.data?.result) {
+                            const u = resBackup.data.result.users;
+                            const s = resBackup.data.result.stats;
+
+                            let teksB = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
+                            teksB += `👤 *Nama:* ${u.nickname || '-'}\n`;
+                            teksB += `🆔 *Username:* @${u.uniqueId || username}\n`;
+                            teksB += `👥 *Pengikut:* ${formatShortNumber(s.followerCount)}\n`;
+                            teksB += `➡️ *Mengikuti:* ${formatShortNumber(s.followingCount)}\n`;
+                            teksB += `❤️ *Total Suka:* ${formatShortNumber(s.heartCount)}\n`;
+                            teksB += `📹 *Total Video:* ${s.videoCount || 0}\n`;
+                            teksB += `📝 *Bio:* ${u.signature || '-'}\n`;
+
+                            const imgUrl = u.avatarLarger || u.avatarMedium;
+                            if (imgUrl) {
+                                await sock.sendMessage(from, { image: { url: imgUrl }, caption: teksB }, { quoted: msg });
+                            } else {
+                                await sock.sendMessage(from, { text: teksB }, { quoted: msg });
+                            }
+                            return;
+                        }
+
+                        await sock.sendMessage(from, { text: '❌ Akun TikTok tidak ditemukan atau server sedang sibuk!' }, { quoted: msg });
                         return;
                     }
 
-                    const data = res.data.result.users;
-                    const stats = res.data.result.stats;
+                    const data = res.data.result;
 
                     let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
                     teks += `👤 *Nama:* ${data.nickname || '-'}\n`;
-                    teks += `🆔 *Username:* @${data.uniqueId || username}\n`;
-                    teks += `👥 *Pengikut:* ${formatShortNumber(stats.followerCount)}\n`;
-                    teks += `➡️ *Mengikuti:* ${formatShortNumber(stats.followingCount)}\n`;
-                    teks += `❤️ *Total Suka:* ${formatShortNumber(stats.heartCount)}\n`;
-                    teks += `📹 *Total Video:* ${stats.videoCount || 0}\n`;
-                    teks += `📝 *Bio:* ${data.signature || '-'}\n`;
+                    teks += `🆔 *Username:* @${data.username || username}\n`;
+                    teks += `👥 *Pengikut:* ${formatShortNumber(data.followers)}\n`;
+                    teks += `➡️ *Mengikuti:* ${formatShortNumber(data.followings)}\n`;
+                    teks += `❤️ *Total Suka:* ${formatShortNumber(data.likes)}\n`;
+                    teks += `📹 *Total Video:* ${data.video || 0}\n`;
+                    teks += `📝 *Bio:* ${data.bio || '-'}\n`;
 
-                    await sock.sendMessage(from, { 
-                        image: { url: data.avatarLarger || data.avatarMedium }, 
-                        caption: teks 
-                    }, { quoted: msg });
+                    if (data.user_picture) {
+                        await sock.sendMessage(from, { 
+                            image: { url: data.user_picture }, 
+                            caption: teks 
+                        }, { quoted: msg });
+                    } else {
+                        await sock.sendMessage(from, { text: teks }, { quoted: msg });
+                    }
 
                     return;
 
                 } catch (err) {
-                    console.error('Error verif TikTok:', err);
+                    console.error('Error verif TikTok:', err.message);
                     await sock.sendMessage(from, { 
-                        text: '❌ Gagal mengambil data akun TikTok. Pastikan username benar.' 
+                        text: '❌ Gagal mengecek akun TikTok. Pastikan username benar.' 
                     }, { quoted: msg });
                     return;
                 }
             }
-
-
 
             // 6. FITUR .KICK
             else if (command === '.kick') {
