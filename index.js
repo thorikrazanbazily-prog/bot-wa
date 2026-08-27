@@ -228,6 +228,7 @@ async function startBot() {
                 }
 
                 try {
+                    // AMBIL DATA TERBARU LANGSUNG DARI SERVER WHATSAPP (MENGHINDARI CACHE LAMA)
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
@@ -239,7 +240,8 @@ async function startBot() {
                         return;
                     }
 
-                    const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+                    // Deteksi JID bot yang akurat
+                    const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
                     const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
@@ -261,6 +263,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot sudah menjadi admin grup.' }, { quoted: msg });
                 }
             }
+
 
             // 6. FITUR .BAN
             else if (command === '.ban') {
