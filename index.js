@@ -1,5 +1,5 @@
 // FITUR .KICK (Khusus Admin Grup & Owner)
-else if (command === '.kick') {
+if (command === '.kick') {
     if (!isGroup) {
         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
         return;
