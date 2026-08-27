@@ -300,7 +300,7 @@ async function startBot() {
                 }
             }
 
-                // FITUR CEK IP
+            // 6. FITUR .GETIP
             else if (command === '.getip') {
                 try {
                     const ipRes = await axios.get('https://api.ipify.org?format=json');
@@ -310,8 +310,7 @@ async function startBot() {
                 }
             }
 
-
-            // 6. FITUR .KICK
+            // 7. FITUR .KICK
             else if (command === '.kick') {
                 if (!isGroup) {
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
