@@ -99,44 +99,49 @@ async function startBot() {
         if (type !== 'notify') return;
 
         for (const msg of messages) {
-            if (!msg.message) continue;
+            try {
+                if (!msg.message) continue;
 
-            const from = msg.key.remoteJid;
-            const isGroup = from.endsWith('@g.us');
+                const from = msg.key.remoteJid;
+                const isGroup = from.endsWith('@g.us');
 
-            const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
-            const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
-            const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
+                const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
+                const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
+                const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
 
-            if (isGroup) {
-                trackActivity(from, rawSender);
-            }
+                // Cek Banned User
+                const banFile = path.join(__dirname, 'banned.json');
+                let banned = fs.existsSync(banFile) ? JSON.parse(fs.readFileSync(banFile)) : [];
+                if (banned.includes(senderNumber)) return; // Abaikan pesan dari user yang dibanned
 
-            const body = msg.message.conversation || 
-                         msg.message.extendedTextMessage?.text || 
-                         msg.message.imageMessage?.caption || 
-                         msg.message.videoMessage?.caption || '';
-            
-            const pesan = body.trim();
-            if (!pesan.startsWith('.')) continue;
-
-            const command = pesan.toLowerCase().split(' ')[0];
-            const args = pesan.split(' ').slice(1);
-
-            // 1. FITUR .PING
-            if (command === '.ping') {
-                const latency = Date.now() - (msg.messageTimestamp * 1000);
-                await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` }, { quoted: msg });
-            }
-
-            // 2. FITUR .LISTMEM
-            else if (command === '.listmem') {
-                if (!isGroup) {
-                    await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
-                    return;
+                if (isGroup) {
+                    trackActivity(from, rawSender);
                 }
 
-                try {
+                const body = msg.message.conversation || 
+                             msg.message.extendedTextMessage?.text || 
+                             msg.message.imageMessage?.caption || 
+                             msg.message.videoMessage?.caption || '';
+                
+                const pesan = body.trim();
+                if (!pesan.startsWith('.')) continue;
+
+                const command = pesan.toLowerCase().split(' ')[0];
+                const args = pesan.split(' ').slice(1);
+
+                // 1. FITUR .PING
+                if (command === '.ping') {
+                    const latency = Date.now() - (msg.messageTimestamp * 1000);
+                    await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${latency} ms*` }, { quoted: msg });
+                }
+
+                // 2. FITUR .LISTMEM
+                else if (command === '.listmem') {
+                    if (!isGroup) {
+                        await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                        return;
+                    }
+
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
@@ -150,15 +155,10 @@ async function startBot() {
                     });
 
                     await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error listmem:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal mengambil daftar member grup.' }, { quoted: msg });
                 }
-            }
 
-            // 3. FITUR .STIKER & .WM
-            else if (command === '.stiker' || command === '.s' || command === '.wm') {
-                try {
+                // 3. FITUR .STIKER & .WM
+                else if (command === '.stiker' || command === '.s' || command === '.wm') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
 
@@ -196,43 +196,37 @@ async function startBot() {
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
                     const stickerBuffer = await imageToSticker(buffer, packname, author);
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-                } catch (err) {
-                    await sock.sendMessage(from, { text: '❌ Gagal membuat stiker.' }, { quoted: msg });
-                }
-            }
-
-            // 4. FITUR .MENU
-            else if (command === '.listfitur' || command === '.menu' || command === '.help') {
-                let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
-                menuText += `• \`.ping\` - Cek kecepatan bot\n`;
-                menuText += `• \`.listmem\` - Daftar member grup\n`;
-                menuText += `• \`.kick @user\` - Mengeluarkan member dari grup (Admin Grup)\n`;
-                menuText += `• \`.ban @user\` - Ban member\n`;
-                menuText += `• \`.ceksider\` - Cek anggota yang tidak pernah chat\n`;
-                menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
-                menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
-                menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
-                menuText += `• \`.hd\` - Mempertajam foto secara lokal (Reply foto)\n`;
-                menuText += `• \`.hdvideo\` - Memperjelas resolusi video (Reply video)\n`;
-                menuText += `• \`.getip <ip/domain>\` - Cek informasi IP / Domain\n`;
-                menuText += `• \`.rpg\` - Berburu monster RPG\n`;
-
-                await sock.sendMessage(from, { text: menuText }, { quoted: msg });
-            }
-
-            // 5. FITUR .KICK (Khusus Admin Grup) - Menggunakan Live Metadata Refresh
-            else if (command === '.kick') {
-                if (!isGroup) {
-                    await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
-                    return;
                 }
 
-                try {
-                    // 1. Ambil data terbaru langsung dari server WhatsApp (bypass cache)
+                // 4. FITUR .MENU
+                else if (command === '.listfitur' || command === '.menu' || command === '.help') {
+                    let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
+                    menuText += `• \`.ping\` - Cek kecepatan bot\n`;
+                    menuText += `• \`.listmem\` - Daftar member grup\n`;
+                    menuText += `• \`.kick @user\` - Mengeluarkan member dari grup (Admin Grup)\n`;
+                    menuText += `• \`.ban\` - Ban member (Owner)\n`;
+                    menuText += `• \`.ceksider\` - Cek anggota yang tidak pernah chat\n`;
+                    menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
+                    menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
+                    menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
+                    menuText += `• \`.hd\` - Mempertajam foto secara lokal (Reply foto)\n`;
+                    menuText += `• \`.hdvideo\` - Memperjelas resolusi video (Reply video)\n`;
+                    menuText += `• \`.getip <ip/domain>\` - Cek informasi IP / Domain\n`;
+                    menuText += `• \`.rpg\` - Berburu monster RPG\n`;
+
+                    await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+                }
+
+                // 5. FITUR .KICK
+                else if (command === '.kick') {
+                    if (!isGroup) {
+                        await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
+                        return;
+                    }
+
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
                     
-                    // 2. Cek apakah pengirim perintah adalah admin atau owner
                     const participant = participants.find(p => p.id === rawSender || p.id.split('@')[0] === senderNumber);
                     const isAdmin = participant && (participant.admin === 'admin' || participant.admin === 'superadmin');
 
@@ -241,11 +235,8 @@ async function startBot() {
                         return;
                     }
 
-                    // 3. Cek apakah bot sudah jadi admin dengan pencocokan JID yang fleksibel
                     const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                    const botNumberOnly = sock.user.id.split('@')[0].split(':')[0];
-                    
-                    const botPart = participants.find(p => p.id === botJid || p.id.startsWith(botNumberOnly));
+                    const botPart = participants.find(p => p.id === botJid || p.id.startsWith(sock.user.id.split('@')[0]));
                     const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                     if (!isBotAdmin) {
@@ -253,7 +244,6 @@ async function startBot() {
                         return;
                     }
 
-                    // 4. Ambil target yang akan di-kick (mention atau reply)
                     let targetUser = msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || msg.message.extendedTextMessage?.contextInfo?.participant;
                     
                     if (!targetUser) {
@@ -261,40 +251,31 @@ async function startBot() {
                         return;
                     }
 
-                    // 5. Eksekusi kick
                     await sock.groupParticipantsUpdate(from, [targetUser], 'remove');
                     await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error kick:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal melakukan kick. Pastikan bot dan kamu adalah admin grup.' }, { quoted: msg });
-                }
-            }
-
-
-            // 6. FITUR .BAN
-            else if (command === '.ban') {
-                if (!isOwner) return;
-                let target = msg.message.extendedTextMessage?.contextInfo?.participant || args[0];
-                if (!target) {
-                    await sock.sendMessage(from, { text: '⚠️ Tag atau masukkan nomor yang ingin di-ban!' }, { quoted: msg });
-                    return;
-                }
-                const banNum = target.replace(/[^0-9]/g, '');
-                const banFile = path.join(__dirname, 'banned.json');
-                let banned = fs.existsSync(banFile) ? JSON.parse(fs.readFileSync(banFile)) : [];
-                if (!banned.includes(banNum)) banned.push(banNum);
-                fs.writeFileSync(banFile, JSON.stringify(banned, null, 2));
-                await sock.sendMessage(from, { text: `🚫 Nomor @${banNum} berhasil dibanned.`, mentions: [`${banNum}@s.whatsapp.net`] }, { quoted: msg });
-            }
-
-            // 7. FITUR .CEKSIDER & .KICKSIDER
-            else if (command === '.ceksider' || command === '.kicksider') {
-                if (!isGroup) {
-                    await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
-                    return;
                 }
 
-                try {
+                // 6. FITUR .BAN
+                else if (command === '.ban') {
+                    if (!isOwner) return;
+                    let target = msg.message.extendedTextMessage?.contextInfo?.participant || msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || args[0];
+                    if (!target) {
+                        await sock.sendMessage(from, { text: '⚠️ Tag atau masukkan nomor yang ingin di-ban!' }, { quoted: msg });
+                        return;
+                    }
+                    const banNum = target.replace(/[^0-9]/g, '');
+                    if (!banned.includes(banNum)) banned.push(banNum);
+                    fs.writeFileSync(banFile, JSON.stringify(banned, null, 2));
+                    await sock.sendMessage(from, { text: `🚫 Nomor @${banNum} berhasil dibanned.`, mentions: [`${banNum}@s.whatsapp.net`] }, { quoted: msg });
+                }
+
+                // 7. FITUR .CEKSIDER & .KICKSIDER
+                else if (command === '.ceksider' || command === '.kicksider') {
+                    if (!isGroup) {
+                        await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
+                        return;
+                    }
+
                     const groupMetadata = await sock.groupMetadata(from);
                     const participants = groupMetadata.participants;
 
@@ -330,15 +311,12 @@ async function startBot() {
                         });
                         await sock.sendMessage(from, { text: teks, mentions: mentions }, { quoted: msg });
                     } else if (command === '.kicksider') {
-                        const freshMetadata = await sock.groupMetadata(from);
-                        const freshParticipants = freshMetadata.participants;
-
                         const botJid = sock.user.id.includes(':') ? sock.user.id.split(':')[0] + '@s.whatsapp.net' : sock.user.id;
-                        const botPart = freshParticipants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
+                        const botPart = participants.find(p => p.id === botJid || p.id.includes(sock.user.id.split('@')[0]));
                         const isBotAdmin = botPart && (botPart.admin === 'admin' || botPart.admin === 'superadmin');
 
                         if (!isBotAdmin) {
-                            await sock.sendMessage(from, { text: '❌ Gagal! Bot harus dijadikan *Admin Grup* terlebih dahulu untuk melakukan kick.' }, { quoted: msg });
+                            await sock.sendMessage(from, { text: '❌ Gagal! Bot harus dijadikan *Admin Grup* terlebih dahulu.' }, { quoted: msg });
                             return;
                         }
 
@@ -353,21 +331,16 @@ async function startBot() {
                         }
                         await sock.sendMessage(from, { text: '✅ Selesai membersihkan anggota sider!' }, { quoted: msg });
                     }
-                } catch (err) {
-                    console.error('Error ceksider:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal mengecek sider grup.' }, { quoted: msg });
                 }
-            }
 
-            // 8. FITUR .REMOVEBG
-            else if (command === '.removebg') {
-                try {
+                // 8. FITUR .REMOVEBG
+                else if (command === '.removebg') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
                     const isImage = msg.message.imageMessage || typeQuoted === 'imageMessage';
 
                     if (!isImage) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan caption *.removebg* untuk menghapus latar belakangnya!' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan caption *.removebg*!' }, { quoted: msg });
                         return;
                     }
 
@@ -396,26 +369,20 @@ async function startBot() {
                     } else {
                         await sock.sendMessage(from, { text: '❌ Gagal memproses removebg. Server API sedang bermasalah atau limit habis.' }, { quoted: msg });
                     }
-                } catch (err) {
-                    const errorMsg = err.response?.data?.message || err.message;
-                    console.error('Error detail .removebg:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal removebg.\nDetail Error: ${errorMsg}` }, { quoted: msg });
                 }
-            }
 
-            // 9. FITUR .HD (Enhance Foto Lokal dengan Sharp - Bebas Whitelist IP)
-            else if (command === '.hd') {
-                try {
+                // 9. FITUR .HD
+                else if (command === '.hd') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
                     const isImage = msg.message.imageMessage || typeQuoted === 'imageMessage';
 
                     if (!isImage) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan caption *.hd* untuk mempertajam kualitas foto secara lokal!' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan caption *.hd*!' }, { quoted: msg });
                         return;
                     }
 
-                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan kualitas foto secara lokal (HD)...' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan kualitas foto...' }, { quoted: msg });
 
                     let mediaToDownload = quoted ? {
                         key: { 
@@ -427,37 +394,27 @@ async function startBot() {
                     } : msg;
 
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
-
                     const enhancedBuffer = await sharp(buffer)
                         .sharpen()
                         .modulate({ brightness: 1.05, saturation: 1.1 })
                         .toFormat('jpeg', { quality: 95 })
                         .toBuffer();
 
-                    await sock.sendMessage(from, { 
-                        image: enhancedBuffer, 
-                        caption: '✅ Foto berhasil di-enhance (HD Lokal)!' 
-                    }, { quoted: msg });
-
-                } catch (err) {
-                    console.error('Error detail .hd local:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal memproses foto secara lokal.\nDetail Error: ${err.message}` }, { quoted: msg });
+                    await sock.sendMessage(from, { image: enhancedBuffer, caption: '✅ Foto berhasil di-enhance (HD Lokal)!' }, { quoted: msg });
                 }
-            }
 
-            // 10. FITUR .HDVIDEO
-            else if (command === '.hdvideo' || command === '.reminivideo') {
-                try {
+                // 10. FITUR .HDVIDEO
+                else if (command === '.hdvideo' || command === '.reminivideo') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
                     const isVideo = msg.message.videoMessage || typeQuoted === 'videoMessage';
 
                     if (!isVideo) {
-                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply video dengan caption *.hdvideo* untuk meningkatkan kualitasnya!' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '⚠️ Kirim atau reply video dengan caption *.hdvideo*!' }, { quoted: msg });
                         return;
                     }
 
-                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan resolusi video... Mohon tunggu.' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '⏳ Sedang memproses peningkatan resolusi video...' }, { quoted: msg });
 
                     let mediaToDownload = quoted ? {
                         key: { 
@@ -479,24 +436,18 @@ async function startBot() {
                     if (apiRes && apiRes.data && apiRes.data.result) {
                         await sock.sendMessage(from, { video: { url: apiRes.data.result }, caption: '✅ Video berhasil ditingkatkan kualitasnya (HD)!' }, { quoted: msg });
                     } else {
-                        await sock.sendMessage(from, { text: '❌ Server API video gagal merespon atau membatasi akses IP.' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '❌ Server API video gagal merespon.' }, { quoted: msg });
                     }
-                } catch (err) {
-                    const errorMsg = err.response?.data?.message || err.message;
-                    console.error('Error detail .hdvideo:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal memperjelas video.\nDetail Error: ${errorMsg}` }, { quoted: msg });
-                }
-            }
-
-            // 11. FITUR .GETIP
-            else if (command === '.getip') {
-                const targetIp = args[0];
-                if (!targetIp) {
-                    await sock.sendMessage(from, { text: '⚠️ Masukkan alamat IP atau Domain web yang ingin dicek!\nContoh: `.getip 8.8.8.8` atau `.getip google.com`' }, { quoted: msg });
-                    return;
                 }
 
-                try {
+                // 11. FITUR .GETIP
+                else if (command === '.getip') {
+                    const targetIp = args[0];
+                    if (!targetIp) {
+                        await sock.sendMessage(from, { text: '⚠️ Masukkan alamat IP atau Domain web!\nContoh: `.getip 8.8.8.8`' }, { quoted: msg });
+                        return;
+                    }
+
                     await sock.sendMessage(from, { text: `🔍 Sedang melacak informasi untuk: *${targetIp}*...` }, { quoted: msg });
 
                     const response = await axios.get(`http://ip-api.com/json/${targetIp}?fields=status,message,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query`);
@@ -510,43 +461,42 @@ async function startBot() {
                     let teks = `🌐 *INFORMASI IP / DOMAIN* 🌐\n\n`;
                     teks += `• *IP/Host:* ${data.query}\n`;
                     teks += `• *Negara:* ${data.country} (${data.countryCode})\n`;
-                    teks += `• *Wilayah/Provinsi:* ${data.regionName}\n`;
+                    teks += `• *Wilayah:* ${data.regionName}\n`;
                     teks += `• *Kota:* ${data.city} (${data.zip})\n`;
                     teks += `• *ISP:* ${data.isp}\n`;
                     teks += `• *Organisasi:* ${data.org || '-'}\n`;
                     teks += `• *Zona Waktu:* ${data.timezone}\n`;
-                    teks += `• *Koordinat:* ${data.lat}, ${data.lon}\n`;
 
                     await sock.sendMessage(from, { text: teks }, { quoted: msg });
-                } catch (err) {
-                    console.error('Error getip:', err);
-                    await sock.sendMessage(from, { text: '❌ Terjadi kesalahan saat mengambil data IP.' }, { quoted: msg });
-                }
-            }
-
-            // 12. FITUR RPG
-            else if (command === '.rpg' || command === '.hunt') {
-                const rpgFile = path.join(__dirname, 'rpg_users.json');
-                let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
-
-                if (!rpgData[senderNumber]) {
-                    rpgData[senderNumber] = { name: msg.pushName || 'Player', health: 100, exp: 0, level: 1, gold: 100, lastHunt: 0 };
                 }
 
-                let player = rpgData[senderNumber];
-                const cooldown = 15000;
-                if (Date.now() - player.lastHunt < cooldown) {
-                    const timeLeft = Math.ceil((cooldown - (Date.now() - player.lastHunt)) / 1000);
-                    await sock.sendMessage(from, { text: `⏳ Tunggu *${timeLeft} detik* lagi sebelum berburu!` }, { quoted: msg });
-                    return;
+                // 12. FITUR RPG
+                else if (command === '.rpg' || command === '.hunt') {
+                    const rpgFile = path.join(__dirname, 'rpg_users.json');
+                    let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
+
+                    if (!rpgData[senderNumber]) {
+                        rpgData[senderNumber] = { name: msg.pushName || 'Player', health: 100, exp: 0, level: 1, gold: 100, lastHunt: 0 };
+                    }
+
+                    let player = rpgData[senderNumber];
+                    const cooldown = 15000;
+                    if (Date.now() - player.lastHunt < cooldown) {
+                        const timeLeft = Math.ceil((cooldown - (Date.now() - player.lastHunt)) / 1000);
+                        await sock.sendMessage(from, { text: `⏳ Tunggu *${timeLeft} detik* lagi sebelum berburu!` }, { quoted: msg });
+                        return;
+                    }
+
+                    player.lastHunt = Date.now();
+                    player.exp += 50;
+                    player.gold += 25;
+                    fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
+
+                    await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
                 }
 
-                player.lastHunt = Date.now();
-                player.exp += 50;
-                player.gold += 25;
-                fs.writeFileSync(rpgFile, JSON.stringify(rpgData, null, 2));
-
-                await sock.sendMessage(from, { text: `⚔️ Berhasil berburu monster!\n✨ EXP +50\n🪙 Gold +25\n⭐ Level: ${player.level}` }, { quoted: msg });
+            } catch (err) {
+                console.error(`Error pada command handler:`, err);
             }
         }
     });
