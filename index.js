@@ -13,6 +13,25 @@ const ownerNumber = ['6281298697777'];
 // File untuk mencatat aktivitas member (Sider Detector)
 const activityFile = path.join(__dirname, 'group_activity.json');
 
+// File untuk menyimpan status mode bot (Private / Public)
+const modeFile = path.join(__dirname, 'bot_mode.json');
+
+function getBotMode() {
+    if (fs.existsSync(modeFile)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(modeFile));
+            return data.mode || 'public';
+        } catch (e) {
+            return 'public';
+        }
+    }
+    return 'public';
+}
+
+function setBotMode(mode) {
+    fs.writeFileSync(modeFile, JSON.stringify({ mode }, null, 2));
+}
+
 // Helper Simpan Aktivitas Member
 function trackActivity(groupId, senderId) {
     if (!groupId || !senderId) return;
@@ -108,6 +127,12 @@ async function startBot() {
                 const rawSender = msg.key.participant || msg.participant || msg.key.remoteJid || '';
                 const senderNumber = rawSender.split('@')[0].replace(/[^0-9]/g, '');
                 const isOwner = ownerNumber.includes(senderNumber) || msg.key.fromMe;
+
+                // Cek Mode Bot (Private / Public)
+                const botMode = getBotMode();
+                if (botMode === 'private' && !isOwner) {
+                    return; // Abaikan pesan dari non-owner jika mode private
+                }
 
                 // Cek Banned User
                 const banFile = path.join(__dirname, 'banned.json');
@@ -207,6 +232,8 @@ async function startBot() {
                     menuText += `• \`.ban\` - Ban member (Owner)\n`;
                     menuText += `• \`.ceksider\` - Cek anggota yang tidak pernah chat\n`;
                     menuText += `• \`.kicksider\` - Kick otomatis anggota sider (Admin Grup)\n`;
+                    menuText += `• \`.private\` - Ubah bot ke mode privat (Owner)\n`;
+                    menuText += `• \`.public\` / \`.publik\` - Ubah bot ke mode publik (Owner)\n`;
                     menuText += `• \`.stiker\` / \`.wm\` - Buat stiker\n`;
                     menuText += `• \`.removebg\` - Hapus background foto (Reply foto)\n`;
                     menuText += `• \`.hd\` - Upscale foto 2x lipat (Reply foto)\n`;
@@ -217,7 +244,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: menuText }, { quoted: msg });
                 }
 
-                // 5. FITUR .KICK (Perbaikan Validasi Admin Bot)
+                // 5. FITUR .KICK
                 else if (command === '.kick') {
                     if (!isGroup) {
                         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -255,7 +282,26 @@ async function startBot() {
                     await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetUser.split('@')[0]} dari grup.`, mentions: [targetUser] }, { quoted: msg });
                 }
 
-                // 6. FITUR .BAN
+                // 6. FITUR .PRIVATE & .PUBLIC
+                else if (command === '.private') {
+                    if (!isOwner) {
+                        await sock.sendMessage(from, { text: '❌ Perintah ini hanya khusus untuk Owner bot!' }, { quoted: msg });
+                        return;
+                    }
+                    setBotMode('private');
+                    await sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke mode *PRIVATE*. Sekarang hanya Owner yang dapat menggunakan bot.' }, { quoted: msg });
+                }
+
+                else if (command === '.public' || command === '.publik') {
+                    if (!isOwner) {
+                        await sock.sendMessage(from, { text: '❌ Perintah ini hanya khusus untuk Owner bot!' }, { quoted: msg });
+                        return;
+                    }
+                    setBotMode('public');
+                    await sock.sendMessage(from, { text: '🌐 Bot berhasil diubah ke mode *PUBLIC*. Sekarang semua orang dapat menggunakan bot.' }, { quoted: msg });
+                }
+
+                // 7. FITUR .BAN
                 else if (command === '.ban') {
                     if (!isOwner) return;
                     let target = msg.message.extendedTextMessage?.contextInfo?.participant || msg.message.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || args[0];
@@ -269,7 +315,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: `🚫 Nomor @${banNum} berhasil dibanned.`, mentions: [`${banNum}@s.whatsapp.net`] }, { quoted: msg });
                 }
 
-                // 7. FITUR .CEKSIDER & .KICKSIDER
+                // 8. FITUR .CEKSIDER & .KICKSIDER
                 else if (command === '.ceksider' || command === '.kicksider') {
                     if (!isGroup) {
                         await sock.sendMessage(from, { text: '⚠️ Fitur ini khusus di dalam grup!' }, { quoted: msg });
@@ -333,7 +379,7 @@ async function startBot() {
                     }
                 }
 
-                // 8. FITUR .REMOVEBG
+                // 9. FITUR .REMOVEBG
                 else if (command === '.removebg') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -371,7 +417,7 @@ async function startBot() {
                     }
                 }
 
-                // 9. FITUR .HD (UPSCALE 2X LIPAT)
+                // 10. FITUR .HD (UPSCALE 2X LIPAT)
                 else if (command === '.hd') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -395,7 +441,6 @@ async function startBot() {
 
                     const buffer = await downloadMediaMessage(mediaToDownload, 'buffer', {});
                     
-                    // Ambil ukuran asli gambar lalu kalikan 2 untuk resolusi upscale
                     const imageMetadata = await sharp(buffer).metadata();
                     const targetWidth = (imageMetadata.width || 800) * 2;
 
@@ -409,7 +454,7 @@ async function startBot() {
                     await sock.sendMessage(from, { image: enhancedBuffer, caption: '✅ Berhasil upscale foto menjadi 2x lipat (HD)!' }, { quoted: msg });
                 }
 
-                // 10. FITUR .HDVIDEO (UPSCALE VIDEO 2X LIPAT)
+                // 11. FITUR .HDVIDEO (UPSCALE VIDEO 2X LIPAT)
                 else if (command === '.hdvideo' || command === '.reminivideo') {
                     const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
                     const typeQuoted = quoted ? Object.keys(quoted)[0] : null;
@@ -436,7 +481,7 @@ async function startBot() {
 
                     const apiRes = await axios.post('https://api.betabotz.eu.org/api/tools/reminivideo', {
                         video: `data:video/mp4;base64,${base64Video}`,
-                        scale: 2, // Permintaan upscale 2x lipat
+                        scale: 2,
                         apikey: 'Btz-L6YG6'
                     }).catch(() => null);
 
@@ -447,7 +492,7 @@ async function startBot() {
                     }
                 }
 
-                // 11. FITUR .GETIP
+                // 12. FITUR .GETIP
                 else if (command === '.getip') {
                     const targetIp = args[0];
                     if (!targetIp) {
@@ -477,7 +522,7 @@ async function startBot() {
                     await sock.sendMessage(from, { text: teks }, { quoted: msg });
                 }
 
-                // 12. FITUR RPG
+                // 13. FITUR RPG
                 else if (command === '.rpg' || command === '.hunt') {
                     const rpgFile = path.join(__dirname, 'rpg_users.json');
                     let rpgData = fs.existsSync(rpgFile) ? JSON.parse(fs.readFileSync(rpgFile)) : {};
