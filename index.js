@@ -131,6 +131,24 @@ async function startBot() {
                 }
             }
 
+            // FITUR .LISTFITUR / .MENU
+            else if (command === '.listfitur' || command === '.menu' || command === '.help') {
+                let menuText = `🤖 *DAFTAR FITUR BOT WHATSAPP* 🤖\n\n`;
+                menuText += `⚡ *Utilities & System*\n`;
+                menuText += `• \`.ping\` - Mengecek kecepatan respon bot (ms)\n\n`;
+                
+                menuText += `👥 *Group Management*\n`;
+                menuText += `• \`.listmem\` - Menampilkan daftar seluruh anggota grup\n\n`;
+                
+                menuText += `🎨 *Sticker Creator*\n`;
+                menuText += `• \`.stiker\` / \`.s\` - Membuat stiker dari gambar (kirim/reply foto)\n`;
+                menuText += `• \`.wm <pack | author>\` - Membuat stiker dengan watermark kustom\n\n`;
+                
+                menuText += `✨ Silakan gunakan fitur di atas sesuai kebutuhan!`;
+
+                await sock.sendMessage(from, { text: menuText }, { quoted: msg });
+            }
+
             // 3 & 4. FITUR .STIKER / .S & .WM
             else if (command === '.stiker' || command === '.s' || command === '.wm') {
                 try {
