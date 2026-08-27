@@ -262,7 +262,7 @@ async function startBot() {
 
             // FITUR .VERIF TIKTOK
 else if (command === '.verif') {
-    const username = args[0]?.replace('@', '');
+    const username = args[0] ? args[0].replace('@', '') : '';
 
     if (!username) {
         await sock.sendMessage(from, { 
@@ -274,36 +274,36 @@ else if (command === '.verif') {
     try {
         await sock.sendMessage(from, { text: '⏳ Sedang mengecek akun TikTok...' }, { quoted: msg });
 
-        // Contoh mengambil data via API publik 
-        const res = await axios.get(`https://api.lolhuman.xyz/api/tiktok/user/${username}?apikey=GANTIPAKAIAPIKEYMU`);
-        const result = res.data.result;
+        // Menggunakan API publik gratis tanpa API key
+        const res = await axios.get(`https://api.vhtear.com/tiktokdl?link=https://www.tiktok.com/@${username}`); 
+        // Catatan: Jika menggunakan API downloader/scraper publik lain, sesuaikan URL-nya di sini.
+        
+        const data = res.data.result; // Menyesuaikan struktur JSON dari API publik
 
         let teks = `✅ *VERIFIKASI AKUN TIKTOK*\n\n`;
-        teks += `👤 *Nama:* ${result.nickname}\n`;
-        teks += `🆔 *Username:* @${result.username}\n`;
-        teks += `👥 *Pengikut:* ${formatShortNumber(result.followers)}\n`;
-        teks += `➡️ *Mengikuti:* ${formatShortNumber(result.following)}\n`;
-        teks += `❤️ *Suka:* ${formatShortNumber(result.likes)}\n`;
-        teks += `🎬 *Total Video:* ${result.video}\n`;
-        teks += `📝 *Bio:* ${result.bio || '-'}\n`;
+        teks += `👤 *Nama:* ${data.nickname || '-'}\n`;
+        teks += `🆔 *Username:* @${username}\n`;
+        teks += `👥 *Pengikut:* ${data.follower || '0'}\n`;
+        teks += `➡️ *Mengikuti:* ${data.following || '0'}\n`;
+        teks += `❤️ *Suka:* ${data.like || '0'}\n`;
+        teks += `📝 *Bio:* ${data.desc || '-'}\n`;
 
-        // Kirim foto profil beserta detail teksnya
-        await sock.sendMessage(from, { 
-            image: { url: result.user_picture }, 
+                await sock.sendMessage(from, { 
+            image: { url: data.avatar || data.thumb }, 
             caption: teks 
         }, { quoted: msg });
 
     } catch (err) {
         console.error('Error verif TikTok:', err);
         await sock.sendMessage(from, { 
-            text: '❌ Username TikTok tidak ditemukan atau terjadi kesalahan server.' 
+            text: '❌ Gagal mengambil data akun TikTok. Pastikan username benar.' 
         }, { quoted: msg });
     }
 }
 
-            // 5. FITUR .KICK
-            else if (command === '.kick') {
-                if (!isGroup) {
+// 5. FITUR .KICK
+else if (command === '.kick') {
+
                     await sock.sendMessage(from, { text: '⚠️ Fitur ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
                     return;
                 }
