@@ -46,80 +46,75 @@ async function startBot() {
 
     // Mendengarkan pesan masuk
     sock.ev.on('messages.upsert', async (chatUpdate) => {
-        try {
-            const mek = chatUpdate.messages[0];
-            if (!mek.message) return;
-            
-            // Mengabaikan pesan dari status atau bot sendiri
-            if (mek.key.fromMe) return;
+    try {
+        const mek = chatUpdate.messages[0];
+        if (!mek.message) return;
+        if (mek.key.fromMe) return;
 
-            const jid = mek.key.remoteJid;
-            
-            // Mendapatkan teks pesan masuk (baik pesan teks biasa maupun balasan klik tombol)
-            const type = Object.keys(mek.message)[0];
-            let bodyText = '';
+        const jid = mek.key.remoteJid;
+        
+        // Ekstraksi teks pesan masuk dengan aman
+        const messageType = Object.keys(mek.message)[0];
+        let textMessage = '';
 
-            if (type === 'conversation') {
-                bodyText = mek.message.conversation;
-            } else if (type === 'extendedTextMessage') {
-                bodyText = mek.message.extendedTextMessage.text;
-            } else if (type === 'interactiveResponseMessage') {
-                // Menangkap respons saat tombol diklik oleh pengguna
-                const response = mek.message.interactiveResponseMessage;
-                if (response.nativeFlowResponseMessage) {
-                    const paramsJson = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
-                    bodyText = paramsJson.id; // Mengambil ID tombol yang dikirim
-                }
+        if (messageType === 'conversation') {
+            textMessage = mek.message.conversation;
+        } else if (messageType === 'extendedTextMessage') {
+            textMessage = mek.message.extendedTextMessage.text;
+        } else if (messageType === 'interactiveResponseMessage') {
+            const response = mek.message.interactiveResponseMessage;
+            if (response.nativeFlowResponseMessage) {
+                const params = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
+                textMessage = params.id;
             }
+        }
 
-            const command = bodyText.trim().toLowerCase();
+        const command = textMessage.trim().toLowerCase();
 
-            // 1. Perintah untuk memunculkan tombol interaktif
-            if (command === '.menu' || command === 'menu') {
-                const buttonMessage = generateWAMessageFromContent(jid, {
-                    viewOnceMessage: {
-                        message: {
-                            interactiveMessage: {
-                                body: { text: "Halo! Silakan pilih salah satu opsi menu di bawah ini:" },
-                                footer: { text: "Powered by Baileys & Node.js" },
-                                nativeFlowMessage: {
-                                    buttons: [
-                                        {
-                                            name: "quick_reply",
-                                            buttonParamsJson: JSON.stringify({
-                                                display_text: "Info Bot",
-                                                id: "btn_info"
-                                            })
-                                        },
-                                        {
-                                            name: "quick_reply",
-                                            buttonParamsJson: JSON.stringify({
-                                                display_text: "Kontak Owner",
-                                                id: "btn_owner"
-                                            })
-                                        }
-                                    ]
-                                }
+        // Handler perintah .menu atau menu
+        if (command === '.menu' || command === 'menu') {
+            const buttonMessage = generateWAMessageFromContent(jid, {
+                viewOnceMessage: {
+                    message: {
+                        interactiveMessage: {
+                            body: { text: "Halo! Silakan pilih salah satu opsi menu di bawah ini:" },
+                            footer: { text: "Powered by Baileys & Node.js" },
+                            nativeFlowMessage: {
+                                buttons: [
+                                    {
+                                        name: "quick_reply",
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: "Info Bot",
+                                            id: "btn_info"
+                                        })
+                                    },
+                                    {
+                                        name: "quick_reply",
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: "Kontak Owner",
+                                            id: "btn_owner"
+                                        })
+                                    }
+                                ]
                             }
                         }
                     }
-                }, {});
+                }
+            }, {});
 
-                await sock.relayMessage(jid, buttonMessage.message, { messageId: buttonMessage.key.id });
-            }
-
-            // 2. Menangani aksi berdasarkan tombol yang diklik
-            else if (command === 'btn_info') {
-                await sock.sendMessage(jid, { text: "Bot ini berjalan menggunakan Node.js dan Baileys versi terbaru!" }, { quoted: mek });
-            } 
-            else if (command === 'btn_owner') {
-                await sock.sendMessage(jid, { text: "Silakan hubungi pemilik bot melalui nomor utama." }, { quoted: mek });
-            }
-
-        } catch (error) {
-            console.error('Terjadi kesalahan pada handler pesan:', error);
+            await sock.relayMessage(jid, buttonMessage.message, { messageId: buttonMessage.key.id });
         }
-    });
+        else if (command === 'btn_info') {
+            await sock.sendMessage(jid, { text: "Bot ini berjalan dengan Baileys versi terbaru!" }, { quoted: mek });
+        }
+        else if (command === 'btn_owner') {
+            await sock.sendMessage(jid, { text: "Silakan hubungi pemilik bot." }, { quoted: mek });
+        }
+
+    } catch (err) {
+        console.error('Error pada handler pesan:', err);
+    }
+  });
 }
 
 startBot();
