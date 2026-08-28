@@ -595,7 +595,7 @@ async function connectToWhatsApp() {
 
                 if (command === '.ewein') {
                     await sock.groupParticipantsUpdate(from, [targetJid], 'remove');
-                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `✅ Berhasil nge ewein si🫪 @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
                 } 
                 else if (command === '.promote') {
                     await sock.groupParticipantsUpdate(from, [targetJid], 'promote');
