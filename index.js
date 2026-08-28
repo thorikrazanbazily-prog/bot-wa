@@ -413,19 +413,113 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-        // FITUR CHANGE NICK (.cn)
-        // ==========================================
-        else if (command === '.cn') {
-            const cnText = 
-`daftar cn (change nick)
-𝐊—
-水
-𝖋𝖙 𝙆𝙂𝙔
-𝐊𝐚𝐠𝐮𝐲𝐚'
-untuk cn copy salah satu saja`;
+// DATABASE & STATE SEMENTARA UNTUK CN GENERATOR
+// ==========================================
+const CN_DB_FILE = 'cn_generator.json';
 
-            await sock.sendMessage(from, { text: cnText }, { quoted: msg });
+const loadCnDb = () => {
+    try {
+        if (fs.existsSync(CN_DB_FILE)) {
+            return JSON.parse(fs.readFileSync(CN_DB_FILE, 'utf8'));
         }
+    } catch (e) {
+        console.error('Gagal membaca DB CN:', e);
+    }
+    return {}; // Format: { groupId: { font: 1, list: ["KGY", "水", "ft kgy"] } }
+};
+
+const saveCnDb = (db) => {
+    try {
+        fs.writeFileSync(CN_DB_FILE, JSON.stringify(db, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan DB CN:', e);
+    }
+};
+
+// ==========================================
+// PASANG KODE INI DI DALAM HANDLER MESSAGES.UPSERT
+// ==========================================
+
+        // FITUR CN GENERATOR INTERAKTIF
+        else if (command === '.cn') {
+            let cnDb = loadCnDb();
+            if (!cnDb[from]) {
+                cnDb[from] = {
+                    font: 1,
+                    list: ["KGY", "水", "ft kgy"] // Default list
+                };
+            }
+            let groupCn = cnDb[from];
+            let subCommand = args[0] ? args[0].toLowerCase() : '';
+            let queryParam = args.slice(1).join(' ');
+
+            // 1. .cn add <nama|nama2>
+            if (subCommand === 'add') {
+                if (!queryParam) return sock.sendMessage(from, { text: '⚠️ Masukkan nama yang ingin ditambahkan!\nContoh: *.cn add KGY | 水*' }, { quoted: msg });
+                let newItems = queryParam.split('|').map(n => n.trim()).filter(n => n.length > 0);
+                groupCn.list.push(...newItems);
+                saveCnDb(cnDb);
+                return sock.sendMessage(from, { text: `✅ Berhasil menambahkan ${newItems.length} item ke list CN!` }, { quoted: msg });
+            }
+            // 2. .cn del <nomor>
+            else if (subCommand === 'del' || subCommand === 'hapus') {
+                let index = parseInt(args[1]) - 1;
+                if (isNaN(index) || index < 0 || index >= groupCn.list.length) {
+                    return sock.sendMessage(from, { text: `⚠️ Nomor urut tidak valid! Cek list dengan ketik .cn` }, { quoted: msg });
+                }
+                let removed = groupCn.list.splice(index, 1);
+                saveCnDb(cnDb);
+                return sock.sendMessage(from, { text: `🗑️ Berhasil menghapus *${removed}* dari list CN.` }, { quoted: msg });
+            }
+            // 3. .cn font <1-4>
+            else if (subCommand === 'font') {
+                let fontChoice = parseInt(args[1]);
+                if (isNaN(fontChoice) || fontChoice < 1 || fontChoice > 4) {
+                    return sock.sendMessage(from, { text: `⚠️ Pilihan font 1 sampai 4 saja!\nContoh: *.cn font 1*` }, { quoted: msg });
+                }
+                groupCn.font = fontChoice;
+                saveCnDb(cnDb);
+                return sock.sendMessage(from, { text: `abc Font diubah ke style: *${fontChoice}*` }, { quoted: msg });
+            }
+            // 4. .cn clear
+            else if (subCommand === 'clear') {
+                groupCn.list = [];
+                saveCnDb(cnDb);
+                return sock.sendMessage(from, { text: `🧹 List CN berhasil dikosongkan!` }, { quoted: msg });
+            }
+
+            // Jika hanya mengetik .cn atau .cn <nama_custom>
+            let customName = args.join(' ');
+            // Jika user mengetik .cn Kaguya (artinya mau generate dengan teks tertentu)
+            let baseName = customName && !['add', 'del', 'font', 'clear'].includes(subCommand) ? customName : '1';
+
+            // Fungsi pengubah gaya font sederhana
+            const applyFont = (text, type) => {
+                if (type === 2) return text.split('').map(c => c.toLowerCase()).join(''); // contoh ubah
+                return text;
+            };
+
+            let responseText = `✨ *CN Generator*\n\n`;
+            responseText += `👤 Nama : ${baseName}\n`;
+            responseText += `abc Font : ${groupCn.font}\n\n`;
+            responseText += `_Klik tombol atau salin teks di bawah untuk salin CN!_\n`;
+
+            // Membuat tombol interaktif / list salin menggunakan format Baileys / teks terstruktur rapi
+            // Catatan: Tombol bailey interaktif tergantung versi baileys, kita buat format teks interaktif box copy yang sangat rapi ala bot Store:
+            groupCn.list.forEach((item, index) => {
+                let formattedNick = `${baseName} ${item}`;
+                responseText += `\n${index + 1}. \`\`\`${formattedNick}\`\`\``;
+            });
+
+            responseText += `\n\n*Panduan Setting:*` +
+                            `\n• \`.cn <nama>\` — generate CN` +
+                            `\n• \`.cn add <A|B|C>\` — tambah` +
+                            `\n• \`.cn font <1-4>\` — ganti font` +
+                            `\n• \`.cn del <no>\` — hapus`;
+
+            await sock.sendMessage(from, { text: responseText }, { quoted: msg });
+        }
+
 
         // ==========================================
         // FITUR VERIFIKASI TIKTOK (.verif) - MAX 1 AKUN
