@@ -46,10 +46,9 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-                if (command === '.button' || command === '.menu') {
+         if (command === '.button' || command === '.menu') {
             await sock.sendMessage(from, {
-                image: { url: "https://files.catbox.moe/k0932h.jpg" },
-                caption: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
+                text: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
                 footer: "Bot Riq Imup",
                 buttons: [
                     {
@@ -68,8 +67,7 @@ async function connectToWhatsApp() {
                             url: "https://whatsapp.com"
                         })
                     }
-                ],
-                headerType: 4
+                ]
             }, { quoted: msg });
         }
     });
