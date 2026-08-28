@@ -7,7 +7,8 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
-        auth: state
+        auth: state,
+        printQRInTerminal: true
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -31,29 +32,44 @@ async function connectToWhatsApp() {
         }
     });
 
-    sock.ev.on('messages.upsert', async (m) => {
+    sock.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-            const msg = m.messages[0];
-            if (!msg.message) return;
+            // Pastikan mengambil objek pesan dengan aman dari chatUpdate.messages
+            const mek = chatUpdate.messages[0];
+            if (!mek.message) return;
 
-            const from = msg.key.remoteJid;
-            const text = msg.message.conversation || 
-                         msg.message.extendedTextMessage?.text || 
-                         msg.message.imageMessage?.caption || '';
+            // Jika pesan berasal dari status / broadcast, abaikan
+            if (mek.key.remoteJid === 'status@broadcast') return;
+
+            const from = mek.key.remoteJid;
+            
+            // Ekstraksi teks dari berbagai jenis tipe pesan masuk
+            const messageType = Object.keys(mek.message)[0];
+            let text = '';
+
+            if (messageType === 'conversation') {
+                text = mek.message.conversation;
+            } else if (messageType === 'extendedTextMessage') {
+                text = mek.message.extendedTextMessage.text;
+            } else if (messageType === 'imageMessage') {
+                text = mek.message.imageMessage.caption;
+            }
 
             if (!text) return;
-            
-            console.log(`Pesan dari ${from}: ${text}`);
+
+            console.log(`📩 Pesan masuk dari ${from}: ${text}`);
 
             const command = text.trim().toLowerCase();
 
+            // Cek perintah .menu, .button, atau .popup
             if (command === '.menu' || command === '.button' || command === '.popup') {
                 await sock.sendMessage(from, {
-                    text: "✨ *MENU PILIHAN* ✨\n\nSilakan pilih opsi berikut:\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
-                }, { quoted: msg });
+                    text: "✨ *MENU UTAMA BOT* ✨\n\nSilakan pilih salah satu opsi di bawah ini dengan mengetik balasannya:\n\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
+                }, { quoted: mek });
+                console.log("✅ Berhasil mengirim balasan menu ke:", from);
             }
-        } catch (error) {
-            console.log("Terjadi kesalahan pada handler pesan:", error);
+        } catch (err) {
+            console.error("❌ Terjadi error pada handler pesan:", err);
         }
     });
 }
