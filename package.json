@@ -1,8 +1,13 @@
 {
   "name": "bot-wa",
   "version": "1.0.0",
+<<<<<<< HEAD
   "main": "index.js",
   "type": "module",
+=======
+  "description": "WhatsApp Bot Termux",
+  "main": "index.js",
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
   "scripts": {
     "start": "node index.js"
   },

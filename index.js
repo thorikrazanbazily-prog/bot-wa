@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = pkg;
 import { pino } from 'pino';
 import qrcode from 'qrcode-terminal';
+=======
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys';
+import { pino } from 'pino';
+import qrcode from 'qrcode-terminal';
+import { Sticker, StickerTypes } from 'wa-sticker-formatter';
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 import axios from 'axios';
 import fs from 'fs';
 
@@ -256,7 +263,11 @@ async function connectToWhatsApp() {
                     };
                 }
 
+<<<<<<< HEAD
                 let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+=======
+                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer kosong.');
@@ -311,7 +322,11 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
+<<<<<<< HEAD
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+=======
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer stiker kosong.');
@@ -371,7 +386,11 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
+<<<<<<< HEAD
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+=======
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer media kosong.');
@@ -446,10 +465,17 @@ async function connectToWhatsApp() {
             }
             let groupCn = cnDb[from];
             let subCommand = args[0] ? args[0].toLowerCase() : '';
+<<<<<<< HEAD
             let queryParam = args.slice(1).join(' ');
 
             // 1. .cn add <nama|nama2>
             if (subCommand === 'add') {
+=======
+
+            // 1. .cn add <nama|nama2>
+            if (subCommand === 'add') {
+                let queryParam = args.slice(1).join(' ');
+>>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
                 if (!queryParam) return sock.sendMessage(from, { text: '⚠️ Masukkan nama yang ingin ditambahkan!\nContoh: *.cn add KGY | 水*' }, { quoted: msg });
                 let newItems = queryParam.split('|').map(n => n.trim()).filter(n => n.length > 0);
                 groupCn.list.push(...newItems);
