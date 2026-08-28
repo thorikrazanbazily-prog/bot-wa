@@ -39,7 +39,7 @@ const saveSettings = (isPublic) => {
     }
 };
 
-let isPublicMode = loadSettings();
+let isPublicMode = true;
 
 // Fungsi membaca database verifikasi TikTok
 const loadDatabase = () => {
