@@ -121,7 +121,7 @@ async function connectToWhatsApp() {
 
     sock.ev.on('messages.upsert', async (m) => {
     const msg = m.messages[0];
-    if (!msg.message || msg.key.fromMe) return;
+    if (!msg.message) return;
 
         const from = msg.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
