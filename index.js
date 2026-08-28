@@ -1,77 +1,125 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
+import { 
+    makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    generateWAMessageFromContent, 
+    proto 
+} from '@whiskeysockets/baileys';
+import { pino } from 'pino';
+import readline from 'readline';
 
-async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
+const question = (text) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise((resolve) => rl.question(text, (ans) => { rl.close(); resolve(ans); }));
+};
+
+async function startBot() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: true
+        printQRInTerminal: false // Menggunakan pairing code agar lebih mudah di Termux
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    // Jika belum ada session, gunakan pairing code nomor WhatsApp
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = await question('Masukkan nomor WhatsApp Anda (contoh: 628xxxxxxxxxx): ');
+        const code = await sock.requestPairingCode(phoneNumber.trim());
+        console.log(`Kode Pairing WhatsApp Anda: ${code}`);
+    }
+
+    sock.connection.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        
-        if (qr) {
-            console.log('Scan QR Code di bawah ini menggunakan WhatsApp:');
-            qrcode.generate(qr, { small: true });
-        }
-
+        const { connection, lastDisconnect } = update;
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Koneksi terputus, mencoba menghubungkan ulang...', shouldReconnect);
             if (shouldReconnect) {
-                connectToWhatsApp();
+                startBot();
             }
         } else if (connection === 'open') {
-            console.log('✅ Bot WhatsApp Berhasil Terhubung dan Siap Digunakan!');
+            console.log('Bot WhatsApp berhasil terhubung!');
         }
     });
 
+    // Mendengarkan pesan masuk
     sock.ev.on('messages.upsert', async (chatUpdate) => {
         try {
-            // Pastikan mengambil objek pesan dengan aman dari chatUpdate.messages
             const mek = chatUpdate.messages[0];
             if (!mek.message) return;
-
-            // Jika pesan berasal dari status / broadcast, abaikan
-            if (mek.key.remoteJid === 'status@broadcast') return;
-
-            const from = mek.key.remoteJid;
             
-            // Ekstraksi teks dari berbagai jenis tipe pesan masuk
-            const messageType = Object.keys(mek.message)[0];
-            let text = '';
+            // Mengabaikan pesan dari status atau bot sendiri
+            if (mek.key.fromMe) return;
 
-            if (messageType === 'conversation') {
-                text = mek.message.conversation;
-            } else if (messageType === 'extendedTextMessage') {
-                text = mek.message.extendedTextMessage.text;
-            } else if (messageType === 'imageMessage') {
-                text = mek.message.imageMessage.caption;
+            const jid = mek.key.remoteJid;
+            
+            // Mendapatkan teks pesan masuk (baik pesan teks biasa maupun balasan klik tombol)
+            const type = Object.keys(mek.message)[0];
+            let bodyText = '';
+
+            if (type === 'conversation') {
+                bodyText = mek.message.conversation;
+            } else if (type === 'extendedTextMessage') {
+                bodyText = mek.message.extendedTextMessage.text;
+            } else if (type === 'interactiveResponseMessage') {
+                // Menangkap respons saat tombol diklik oleh pengguna
+                const response = mek.message.interactiveResponseMessage;
+                if (response.nativeFlowResponseMessage) {
+                    const paramsJson = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
+                    bodyText = paramsJson.id; // Mengambil ID tombol yang dikirim
+                }
             }
 
-            if (!text) return;
+            const command = bodyText.trim().toLowerCase();
 
-            console.log(`📩 Pesan masuk dari ${from}: ${text}`);
+            // 1. Perintah untuk memunculkan tombol interaktif
+            if (command === '.menu' || command === 'menu') {
+                const buttonMessage = generateWAMessageFromContent(jid, {
+                    viewOnceMessage: {
+                        message: {
+                            interactiveMessage: {
+                                body: { text: "Halo! Silakan pilih salah satu opsi menu di bawah ini:" },
+                                footer: { text: "Powered by Baileys & Node.js" },
+                                nativeFlowMessage: {
+                                    buttons: [
+                                        {
+                                            name: "quick_reply",
+                                            buttonParamsJson: JSON.stringify({
+                                                display_text: "Info Bot",
+                                                id: "btn_info"
+                                            })
+                                        },
+                                        {
+                                            name: "quick_reply",
+                                            buttonParamsJson: JSON.stringify({
+                                                display_text: "Kontak Owner",
+                                                id: "btn_owner"
+                                            })
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }, {});
 
-            const command = text.trim().toLowerCase();
-
-            // Cek perintah .menu, .button, atau .popup
-            if (command === '.menu' || command === '.button' || command === '.popup') {
-                await sock.sendMessage(from, {
-                    text: "✨ *MENU UTAMA BOT* ✨\n\nSilakan pilih salah satu opsi di bawah ini dengan mengetik balasannya:\n\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
-                }, { quoted: mek });
-                console.log("✅ Berhasil mengirim balasan menu ke:", from);
+                await sock.relayMessage(jid, buttonMessage.message, { messageId: buttonMessage.key.id });
             }
-        } catch (err) {
-            console.error("❌ Terjadi error pada handler pesan:", err);
+
+            // 2. Menangani aksi berdasarkan tombol yang diklik
+            else if (command === 'btn_info') {
+                await sock.sendMessage(jid, { text: "Bot ini berjalan menggunakan Node.js dan Baileys versi terbaru!" }, { quoted: mek });
+            } 
+            else if (command === 'btn_owner') {
+                await sock.sendMessage(jid, { text: "Silakan hubungi pemilik bot melalui nomor utama." }, { quoted: mek });
+            }
+
+        } catch (error) {
+            console.error('Terjadi kesalahan pada handler pesan:', error);
         }
     });
 }
 
-connectToWhatsApp();
+startBot();
