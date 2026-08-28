@@ -47,9 +47,9 @@ async function connectToWhatsApp() {
 
             const command = text.trim().toLowerCase();
 
-            if (command === '.menu' || command === '.popup' || command === '.button') {
+            if (command === '.menu' || command === '.button' || command === '.popup') {
                 await sock.sendMessage(from, {
-                    text: "✨ *MENU PILIHAN FORMAT NAMA* ✨\n\nSilakan pilih opsi di bawah ini:\n\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
+                    text: "✨ *MENU PILIHAN* ✨\n\nSilakan pilih opsi berikut:\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
                 }, { quoted: msg });
             }
         } catch (error) {
