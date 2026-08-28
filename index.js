@@ -130,7 +130,8 @@ async function connectToWhatsApp() {
 
         const text = msg.message.conversation || 
                      msg.message.extendedTextMessage?.text || 
-                     msg.message.imageMessage?.caption || '';
+                     msg.message.imageMessage?.caption || 
+                     msg.message.videoMessage?.caption || '';
 
         if (!text) return;
         const args = text.trim().split(/ +/);
@@ -146,7 +147,7 @@ async function connectToWhatsApp() {
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
             isPublicMode = false;
             saveSettings(isPublicMode);
-            return sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke *MODE PRIVATE*.\n\Hanya Owner dan daftar nomor VIP yang dapat menggunakan bot.' }, { quoted: msg });
+            return sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke *MODE PRIVATE*.\n\nHanya Owner dan daftar nomor VIP yang dapat menggunakan bot.' }, { quoted: msg });
         } 
         else if (command === '.publik' || command === '.public') {
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
@@ -174,9 +175,11 @@ async function connectToWhatsApp() {
 🎨 *STIKER & MEDIA*
 * ➔ *.stiker* / *.s* : Kirim/reply foto jadi stiker
 * ➔ *.wm <pack> | <author>* : Ubah watermark stiker
+* ➔ *.rvo* : Reply foto/video sekali lihat (view once)
 
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
+* ➔ *.add <nomor>* : Menambahkan member ke grup
 * ➔ *.ewein @user* : Mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
 
@@ -305,6 +308,66 @@ async function connectToWhatsApp() {
             } catch (err) {
                 console.error('Error Watermark Detail:', err);
                 await sock.sendMessage(from, { text: '❌ Gagal mengubah watermark stiker. Pastikan stiker yang di-reply adalah stiker statis!' }, { quoted: msg });
+            }
+        }
+
+        // ==========================================
+        // FITUR READ VIEW ONCE (.rvo)
+        // ==========================================
+        else if (command === '.rvo' || command === '.readviewonce') {
+            try {
+                const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                const qMsg = contextInfo?.quotedMessage;
+
+                if (!qMsg) {
+                    return sock.sendMessage(from, { text: '⚠️ Reply foto atau video sekali lihat (view once) yang ingin dibuka!' }, { quoted: msg });
+                }
+
+                // Mendeteksi berbagai jenis bungkus pesan view once (v1 atau v2)
+                const viewOnceMsg = qMsg.viewOnceMessage?.message || 
+                                    qMsg.viewOnceMessageV2?.message || 
+                                    qMsg.ephemeralMessage?.message?.viewOnceMessage?.message ||
+                                    qMsg.ephemeralMessage?.message?.viewOnceMessageV2?.message;
+
+                const mediaMessage = viewOnceMsg?.imageMessage || 
+                                     viewOnceMsg?.videoMessage || 
+                                     qMsg.imageMessage || 
+                                     qMsg.videoMessage;
+
+                if (!mediaMessage) {
+                    return sock.sendMessage(from, { text: '❌ Pesan yang kamu reply bukan media *View Once* (Sekali Lihat) yang valid!' }, { quoted: msg });
+                }
+
+                await sock.sendMessage(from, { text: '⏳ Mengambil media view once...' }, { quoted: msg });
+
+                // Menyiapkan target pesan untuk di-download
+                const mediaTarget = {
+                    key: {
+                        remoteJid: from,
+                        fromMe: false,
+                        id: contextInfo.stanzaId,
+                        participant: contextInfo.participant || from
+                    },
+                    message: qMsg
+                };
+
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+
+                if (!mediaBuffer || mediaBuffer.length === 0) {
+                    throw new Error('Buffer media kosong.');
+                }
+
+                const caption = mediaMessage.caption || 'Nih pesan view once-nya berhasil dibongkar 🔓';
+
+                if (mediaMessage.mimetype && mediaMessage.mimetype.includes('video')) {
+                    await sock.sendMessage(from, { video: mediaBuffer, caption: caption }, { quoted: msg });
+                } else {
+                    await sock.sendMessage(from, { image: mediaBuffer, caption: caption }, { quoted: msg });
+                }
+
+            } catch (err) {
+                console.error('Error RVO Detail:', err);
+                await sock.sendMessage(from, { text: '❌ Gagal membuka pesan View Once. Pastikan kamu mereply pesan sekali lihat dengan benar!' }, { quoted: msg });
             }
         }
 
@@ -558,9 +621,9 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-        // FITUR GRUP (.ewein, .promote, .demote)
+        // FITUR GRUP (.add, .ewein, .promote, .demote)
         // ==========================================
-        else if (['.ewein', '.promote', '.demote'].includes(command)) {
+        else if (['.add', '.ewein', '.promote', '.demote'].includes(command)) {
             if (!isGroup) {
                 return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
             }
@@ -577,6 +640,33 @@ async function connectToWhatsApp() {
                     return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup* atau *Owner*!' }, { quoted: msg });
                 }
 
+                // Handler khusus untuk fitur .add (menambahkan nomor)
+                if (command === '.add') {
+                    let targetNumberInput = args[0] ? args[0].replace(/[^0-9]/g, '') : '';
+                    if (!targetNumberInput) {
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan nomor yang ingin ditambahkan!\nContoh: *.add 628123456789*' }, { quoted: msg });
+                    }
+
+                    const targetJid = targetNumberInput + '@s.whatsapp.net';
+                    
+                    try {
+                        const response = await sock.groupParticipantsUpdate(from, [targetJid], 'add');
+                        const resObj = response?.[0] || response;
+                        
+                        // Cek status penambahan partisipan
+                        if (resObj && resObj.status >= 400) {
+                            return sock.sendMessage(from, { text: `❌ Gagal menambahkan member. WhatsApp membatasi penambahan jika user mengaktifkan privasi atau baru saja keluar.` }, { quoted: msg });
+                        }
+
+                        await sock.sendMessage(from, { text: `✅ Berhasil menambahkan @${targetNumberInput} ke dalam grup.`, mentions: [targetJid] }, { quoted: msg });
+                    } catch (addErr) {
+                        console.error('Error Add Participant:', addErr);
+                        await sock.sendMessage(from, { text: '❌ Gagal menambahkan member. Pastikan nomor valid dan berawalan kode negara (contoh: 62).' }, { quoted: msg });
+                    }
+                    return;
+                }
+
+                // Handler untuk .ewein, .promote, .demote yang memerlukan target user (mention atau reply)
                 let targetJid = null;
                 const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid;
                 const quotedSender = msg.message.extendedTextMessage?.contextInfo?.participant;
@@ -595,7 +685,7 @@ async function connectToWhatsApp() {
 
                 if (command === '.ewein') {
                     await sock.groupParticipantsUpdate(from, [targetJid], 'remove');
-                    await sock.sendMessage(from, { text: `✅ Berhasil nge ewein si🫪 @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
                 } 
                 else if (command === '.promote') {
                     await sock.groupParticipantsUpdate(from, [targetJid], 'promote');
@@ -614,4 +704,3 @@ async function connectToWhatsApp() {
 }
 
 connectToWhatsApp();
-
