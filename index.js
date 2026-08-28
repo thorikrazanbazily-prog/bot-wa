@@ -287,7 +287,7 @@ if (command === '.cn') {
     saveCnDb(cnDb);
 
     let successText = 
-`✅ *BERHASIL MENYIMPAN NICKNAME*
+✅ *BERHASIL MENYIMPAN NICKNAME*
 
 👤 *Nama:* ${msg.pushName || 'User'}
 ✨ *Nick:* ${nickArgs}
