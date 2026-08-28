@@ -418,9 +418,10 @@ async function connectToWhatsApp() {
         else if (command === '.cn') {
             const cnText = 
 `daftar cn (change nick)
-1. \`\`\`KGY\`\`\`
-2. \`\`\`水\`\`\`
-3. \`\`\`ft kgy\`\`\`
+𝐊—
+水
+𝖋𝖙 𝙆𝙂𝙔
+𝐊𝐚𝐠𝐮𝐲𝐚'
 untuk cn copy salah satu saja`;
 
             await sock.sendMessage(from, { text: cnText }, { quoted: msg });
