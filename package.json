@@ -1,22 +1,18 @@
+cat << 'EOF' > package.json
 {
   "name": "bot-wa",
   "version": "1.0.0",
-<<<<<<< HEAD
+  "description": "WhatsApp Bot",
   "main": "index.js",
   "type": "module",
-=======
-  "description": "WhatsApp Bot Termux",
-  "main": "index.js",
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.6.0",
-    "axios": "^1.6.8",
-    "cheerio": "^1.0.0-rc.12",
-    "fluent-ffmpeg": "^2.1.2",
-    "pino": "^8.19.0",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.7.9",
+    "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0"
   }
 }
+EOF
