@@ -54,20 +54,21 @@ async function startBot() {
         const jid = mek.key.remoteJid;
         
         // Ekstraksi teks pesan masuk dengan aman
-        const messageType = Object.keys(mek.message)[0];
-        let textMessage = '';
+        const msgContent = mek.message.ephemeralMessage?.message || mek.message.viewOnceMessage?.message || mek.message;
+const messageType = Object.keys(msgContent)[0];
+let textMessage = '';
 
-        if (messageType === 'conversation') {
-            textMessage = mek.message.conversation;
-        } else if (messageType === 'extendedTextMessage') {
-            textMessage = mek.message.extendedTextMessage.text;
-        } else if (messageType === 'interactiveResponseMessage') {
-            const response = mek.message.interactiveResponseMessage;
-            if (response.nativeFlowResponseMessage) {
-                const params = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
-                textMessage = params.id;
-            }
-        }
+if (messageType === 'conversation') {
+    textMessage = msgContent.conversation;
+} else if (messageType === 'extendedTextMessage') {
+    textMessage = msgContent.extendedTextMessage.text;
+} else if (messageType === 'interactiveResponseMessage') {
+    const response = msgContent.interactiveResponseMessage;
+    if (response.nativeFlowResponseMessage) {
+        const params = JSON.parse(response.nativeFlowResponseMessage.paramsJson);
+        textMessage = params.id;
+    }
+}
 
         const command = textMessage.trim().toLowerCase();
 
