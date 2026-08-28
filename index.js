@@ -46,37 +46,27 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-                        if (command === '.button' || command === '.menu') {
+                if (command === '.button' || command === '.menu') {
             await sock.sendMessage(from, {
-                image: { url: "https://files.catbox.moe/k0932h.jpg" }, // Ganti URL gambar bebas sesuai keinginan
+                image: { url: "https://files.catbox.moe/k0932h.jpg" },
                 caption: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
                 footer: "Bot Riq Imup",
                 buttons: [
                     {
-                        buttonId: "copy_voucher_1",
-                        buttonText: { displayText: "📋 Salin Kode Voucher" },
-                        type: 1,
-                        nativeFlowInfo: {
-                            name: "cta_copy",
-                            paramsJson: JSON.stringify({
-                                display_text: "📋 Salin Kode Voucher",
-                                id: "copy_voucher_1",
-                                copy_code: "RIQIMUP2026"
-                            })
-                        }
+                        name: "cta_copy",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "📋 Salin Kode Voucher",
+                            id: "copy_voucher_1",
+                            copy_code: "RIQIMUP2026"
+                        })
                     },
                     {
-                        buttonId: "url_btn",
-                        buttonText: { displayText: "🌐 Kunjungi Website" },
-                        type: 1,
-                        nativeFlowInfo: {
-                            name: "cta_url",
-                            paramsJson: JSON.stringify({
-                                display_text: "🌐 Kunjungi Website",
-                                id: "url_btn",
-                                url: "https://whatsapp.com"
-                            })
-                        }
+                        name: "cta_url",
+                        buttonParamsJson: JSON.stringify({
+                            display_text: "🌐 Kunjungi Website",
+                            id: "url_btn",
+                            url: "https://whatsapp.com"
+                        })
                     }
                 ],
                 headerType: 4
