@@ -1,5 +1,4 @@
-import pkg from '@whiskeysockets/baileys';
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = pkg;
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys';
 import { pino } from 'pino';
 import qrcode from 'qrcode-terminal';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
@@ -257,7 +256,7 @@ async function connectToWhatsApp() {
                     };
                 }
 
-                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer kosong.');
@@ -312,7 +311,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer stiker kosong.');
@@ -372,7 +371,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer media kosong.');
@@ -447,10 +446,10 @@ async function connectToWhatsApp() {
             }
             let groupCn = cnDb[from];
             let subCommand = args[0] ? args[0].toLowerCase() : '';
-            let queryParam = args.slice(1).join(' ');
 
             // 1. .cn add <nama|nama2>
             if (subCommand === 'add') {
+                let queryParam = args.slice(1).join(' ');
                 if (!queryParam) return sock.sendMessage(from, { text: '⚠️ Masukkan nama yang ingin ditambahkan!\nContoh: *.cn add KGY | 水*' }, { quoted: msg });
                 let newItems = queryParam.split('|').map(n => n.trim()).filter(n => n.length > 0);
                 groupCn.list.push(...newItems);
