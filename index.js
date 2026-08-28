@@ -7,7 +7,6 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: true,
         auth: state
     });
 
@@ -28,47 +27,46 @@ async function connectToWhatsApp() {
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
-            console.log('✅ Bot WhatsApp dengan fitur Button SIAP DIGUNAKAN!');
+            console.log('✅ Bot WhatsApp Berhasil Terhubung dan Siap Digunakan!');
         }
     });
 
     sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.message) return;
+        try {
+            const msg = m.messages[0];
+            if (!msg.message) return;
 
-        const from = msg.key.remoteJid;
-        const text = msg.message.conversation || 
-                     msg.message.extendedTextMessage?.text || '';
+            // Debugging: melihat data pesan yang masuk di terminal
+            const from = msg.key.remoteJid;
+            const text = msg.message.conversation || 
+                         msg.message.extendedTextMessage?.text || 
+                         msg.message.imageMessage?.caption || '';
 
-        if (!text) return;
-        const command = text.trim().toLowerCase();
+            if (!text) return;
+            
+            console.log(`Pesan dari ${from}: ${text}`);
 
-        // ==========================================
-        // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
-        // ==========================================
-        if (command === '.menu' || command === '.popup' || command === '.button') {
-            await sock.sendMessage(from, {
-                text: "✨ *MENU POP-UP INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi di bawah ini:",
-                footer: "Bot Riq Imup",
-                buttons: [
-                    {
-                        buttonId: "opt_1",
-                        buttonText: { displayText: "📋 K– Angga" },
-                        type: 1
-                    },
-                    {
-                        buttonId: "opt_2",
-                        buttonText: { displayText: "📋 水 Angga" },
-                        type: 1
-                    },
-                    {
-                        buttonId: "opt_3",
-                        buttonText: { displayText: "📋 Angga Kaguya" },
-                        type: 1
-                    }
-                ],
-                headerType: 1
-            }, { quoted: msg });
+            const command = text.trim().toLowerCase();
+
+            if (command === '.menu' || command === '.popup' || command === '.button') {
+                await sock.sendMessage(from, {
+                    text: "✨ *MENU UTAMA BOT RIQ* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
+                    footer: "Bot Riq Imup",
+                    buttons: [
+                        {
+                            name: "cta_url",
+                            buttonParamsJson: JSON.stringify({
+                                display_text: "🌐 Kunjungi Website",
+                                id: "url_btn",
+                                url: "https://whatsapp.com"
+                            })
+                        }
+                    ],
+                    headerType: 1
+                }, { quoted: msg });
+            }
+        } catch (error) {
+            console.log("Terjadi kesalahan pada handler pesan:", error);
         }
     });
 }
