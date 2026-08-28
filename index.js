@@ -15,6 +15,7 @@ const VIP_NUMBERS = ['6285722869044', '6285722256098', '6282126168799'];     // 
 const SETTINGS_FILE = 'bot_settings.json';
 const DB_VERIF_FILE = 'verified_users.json';
 const DB_RPG_FILE = 'rpg.json';
+const DB_CN_FILE = 'nicknames.json'; // Database untuk fitur .cn
 
 // Fungsi membaca settingan bot
 const loadSettings = () => {
@@ -79,6 +80,26 @@ const saveRpgDb = (db) => {
         fs.writeFileSync(DB_RPG_FILE, JSON.stringify(db, null, 2));
     } catch (e) {
         console.error('Gagal menyimpan database RPG:', e);
+    }
+};
+
+// Fungsi Database Nickname (.cn)
+const loadCnDb = () => {
+    try {
+        if (fs.existsSync(DB_CN_FILE)) {
+            return JSON.parse(fs.readFileSync(DB_CN_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Gagal membaca database CN:', e);
+    }
+    return {};
+};
+
+const saveCnDb = (db) => {
+    try {
+        fs.writeFileSync(DB_CN_FILE, JSON.stringify(db, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan database CN:', e);
     }
 };
 
@@ -180,8 +201,13 @@ async function connectToWhatsApp() {
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
 * ➔ *.masukin +62 831-6609-3861* : Menambahkan member ke grup
-* ➔ *.ewein @user* : Mengeluarkan member dari grup
+* ➔ *.ewein @user* : Mencopot/mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
+
+📝 *NICKNAME (QUICK CHAT)*
+* ➔ *.cn <nickname>* : Simpan atau ganti nickname kamu
+* ➔ *.mycn* : Lihat nickname kamu yang tersimpan
+* ➔ *.listcn* : Lihat daftar seluruh nickname tersimpan
 
 🎵 *VERIFIKASI TIKTOK*
 * ➔ *.verif <username>* : Verifikasi akun TikTok (Maks 1)
@@ -199,6 +225,69 @@ async function connectToWhatsApp() {
         else if (command === '.ping') {
             const start = Date.now();
             await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${Date.now() - start} ms*` }, { quoted: msg });
+        }
+
+        // ==========================================
+        // FITUR NICKNAME (.cn, .mycn, .listcn)
+        // ==========================================
+        else if (command === '.cn') {
+            let nickArgs = args.join(' ');
+            if (!nickArgs) {
+                return sock.sendMessage(from, { text: '⚠️ Masukkan nickname yang ingin disimpan!\nContoh: *.cn RiqzXz*' }, { quoted: msg });
+            }
+
+            let cnDb = loadCnDb();
+            cnDb[senderNumber] = {
+                name: msg.pushName || 'User',
+                nickname: nickArgs,
+                updatedAt: new Date().toLocaleString('id-ID')
+            };
+            saveCnDb(cnDb);
+
+            let successText = 
+`✅ *BERHASIL MENYIMPAN NICKNAME*
+
+👤 *Nama:* ${msg.pushName || 'User'}
+✨ *Nick:* ${nickArgs}
+
+_Tips: Cukup ketuk (tap) teks di bawah ini untuk menyalin dengan cepat (Quick Copy), lalu gunakan untuk chat!_
+\`\`\`${nickArgs}\`\`\``;
+
+            await sock.sendMessage(from, { text: successText }, { quoted: msg });
+        }
+        else if (command === '.mycn') {
+            let cnDb = loadCnDb();
+            if (!cnDb[senderNumber]) {
+                return sock.sendMessage(from, { text: '⚠️ Kamu belum mengatur nickname. Gunakan perintah *.cn <nickname>* terlebih dahulu!' }, { quoted: msg });
+            }
+
+            let data = cnDb[senderNumber];
+            let myText = 
+`👤 *NICKNAME ANDA*
+
+✨ *Nick:* ${data.nickname}
+🕒 *Terakhir Diubah:* ${data.updatedAt}
+
+_Klik/tap teks di bawah untuk menyalin:_
+\`\`\`${data.nickname}\`\`\``;
+
+            await sock.sendMessage(from, { text: myText }, { quoted: msg });
+        }
+        else if (command === '.listcn' || command === '.cnlist') {
+            let cnDb = loadCnDb();
+            let keys = Object.keys(cnDb);
+            if (keys.length === 0) {
+                return sock.sendMessage(from, { text: '⚠️ Belum ada nickname yang tersimpan di database.' }, { quoted: msg });
+            }
+
+            let textList = `📋 *DAFTAR NICKNAME TERPANTAU* 📋\n\n`;
+            keys.forEach((num, index) => {
+                let item = cnDb[num];
+                textList += `${index + 1}. *${item.name}* (@${num})\n   ➔ Nick: \`${item.nickname}\`\n\n`;
+            });
+            textList += `_Gunakan *.cn <nickname>* untuk memperbarui milikmu sendiri._`;
+
+            await sock.sendMessage(from, { text: textList }, { quoted: msg });
         }
 
         // ==========================================
