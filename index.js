@@ -558,9 +558,9 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-        // FITUR GRUP (.kick, .promote, .demote)
+        // FITUR GRUP (.ewein, .promote, .demote)
         // ==========================================
-        else if (['.kick', '.promote', '.demote'].includes(command)) {
+        else if (['.ewein', '.promote', '.demote'].includes(command)) {
             if (!isGroup) {
                 return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
             }
