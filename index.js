@@ -1,28 +1,20 @@
-<<<<<<< HEAD
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = pkg;
-import { pino } from 'pino';
-import qrcode from 'qrcode-terminal';
-=======
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys';
-import { pino } from 'pino';
-import qrcode from 'qrcode-terminal';
-import { Sticker, StickerTypes } from 'wa-sticker-formatter';
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
-import axios from 'axios';
-import fs from 'fs';
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const pino = require('pino');
+const qrcode = require('qrcode-terminal');
+const { Sticker, StickerTypes } = require('wa-sticker-formatter');
+const axios = require('axios');
+const fs = require('fs');
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
 // ==========================================
 const OWNER_NUMBERS = ['6281298697777']; // Masukkan nomor owner di sini
-const VIP_NUMBERS = ['6285722869044', '63801957298267', '6282126168799'];     // Masukkan nomor VIP agar tetap bisa akses saat private
+const VIP_NUMBERS = ['6285722869044', '6285722256098', '6282126168799'];     // Masukkan nomor VIP agar tetap bisa akses saat private
 
 // FILE LOKAL UNTUK MENYIMPAN SETTINGAN & DATABASE
 const SETTINGS_FILE = 'bot_settings.json';
 const DB_VERIF_FILE = 'verified_users.json';
 const DB_RPG_FILE = 'rpg.json';
-const CN_DB_FILE = 'cn_generator.json';
 
 // Fungsi membaca settingan bot
 const loadSettings = () => {
@@ -87,26 +79,6 @@ const saveRpgDb = (db) => {
         fs.writeFileSync(DB_RPG_FILE, JSON.stringify(db, null, 2));
     } catch (e) {
         console.error('Gagal menyimpan database RPG:', e);
-    }
-};
-
-// Fungsi Database CN Generator
-const loadCnDb = () => {
-    try {
-        if (fs.existsSync(CN_DB_FILE)) {
-            return JSON.parse(fs.readFileSync(CN_DB_FILE, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Gagal membaca DB CN:', e);
-    }
-    return {};
-};
-
-const saveCnDb = (db) => {
-    try {
-        fs.writeFileSync(CN_DB_FILE, JSON.stringify(db, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan DB CN:', e);
     }
 };
 
@@ -208,9 +180,8 @@ async function connectToWhatsApp() {
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
 * ➔ *.masukin +62 831-6609-3861* : Menambahkan member ke grup
-* ➔ *.ewein @user* : Mencopot/mengeluarkan member dari grup
+* ➔ *.ewein @user* : Mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
-* ➔ *.cn* : Menampilkan list default nick siap copy
 
 🎵 *VERIFIKASI TIKTOK*
 * ➔ *.verif <username>* : Verifikasi akun TikTok (Maks 1)
@@ -263,11 +234,7 @@ async function connectToWhatsApp() {
                     };
                 }
 
-<<<<<<< HEAD
-                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-=======
                 let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer kosong.');
@@ -322,11 +289,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-<<<<<<< HEAD
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-=======
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer stiker kosong.');
@@ -386,11 +349,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-<<<<<<< HEAD
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-=======
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer media kosong.');
@@ -450,86 +409,6 @@ async function connectToWhatsApp() {
                 console.error('Error Hidetag Detail:', err);
                 await sock.sendMessage(from, { text: '❌ Gagal mengeksekusi fitur hidetag.' }, { quoted: msg });
             }
-        }
-
-        // ==========================================
-        // FITUR CN GENERATOR INTERAKTIF (.cn)
-        // ==========================================
-        else if (command === '.cn') {
-            let cnDb = loadCnDb();
-            if (!cnDb[from]) {
-                cnDb[from] = {
-                    font: 1,
-                    list: ["KGY", "水", "ft kgy"] // Default list
-                };
-            }
-            let groupCn = cnDb[from];
-            let subCommand = args[0] ? args[0].toLowerCase() : '';
-<<<<<<< HEAD
-            let queryParam = args.slice(1).join(' ');
-
-            // 1. .cn add <nama|nama2>
-            if (subCommand === 'add') {
-=======
-
-            // 1. .cn add <nama|nama2>
-            if (subCommand === 'add') {
-                let queryParam = args.slice(1).join(' ');
->>>>>>> ba4dd8f6a9d0f8306a3daa53fabaa4931d7a58be
-                if (!queryParam) return sock.sendMessage(from, { text: '⚠️ Masukkan nama yang ingin ditambahkan!\nContoh: *.cn add KGY | 水*' }, { quoted: msg });
-                let newItems = queryParam.split('|').map(n => n.trim()).filter(n => n.length > 0);
-                groupCn.list.push(...newItems);
-                saveCnDb(cnDb);
-                return sock.sendMessage(from, { text: `✅ Berhasil menambahkan ${newItems.length} item ke list CN!` }, { quoted: msg });
-            }
-            // 2. .cn del <nomor>
-            else if (subCommand === 'del' || subCommand === 'hapus') {
-                let index = parseInt(args[1]) - 1;
-                if (isNaN(index) || index < 0 || index >= groupCn.list.length) {
-                    return sock.sendMessage(from, { text: `⚠️ Nomor urut tidak valid! Cek list dengan ketik .cn` }, { quoted: msg });
-                }
-                let removed = groupCn.list.splice(index, 1);
-                saveCnDb(cnDb);
-                return sock.sendMessage(from, { text: `🗑️ Berhasil menghapus *${removed}* dari list CN.` }, { quoted: msg });
-            }
-            // 3. .cn font <1-4>
-            else if (subCommand === 'font') {
-                let fontChoice = parseInt(args[1]);
-                if (isNaN(fontChoice) || fontChoice < 1 || fontChoice > 4) {
-                    return sock.sendMessage(from, { text: `⚠️ Pilihan font 1 sampai 4 saja!\nContoh: *.cn font 1*` }, { quoted: msg });
-                }
-                groupCn.font = fontChoice;
-                saveCnDb(cnDb);
-                return sock.sendMessage(from, { text: `abc Font diubah ke style: *${fontChoice}*` }, { quoted: msg });
-            }
-            // 4. .cn clear
-            else if (subCommand === 'clear') {
-                groupCn.list = [];
-                saveCnDb(cnDb);
-                return sock.sendMessage(from, { text: `🧹 List CN berhasil dikosongkan!` }, { quoted: msg });
-            }
-
-            // Jika hanya mengetik .cn atau .cn <nama_custom>
-            let customName = args.join(' ');
-            let baseName = customName && !['add', 'del', 'font', 'clear'].includes(subCommand) ? customName : '1';
-
-            let responseText = `✨ *CN Generator*\n\n`;
-            responseText += `👤 Nama : ${baseName}\n`;
-            responseText += `abc Font : ${groupCn.font}\n\n`;
-            responseText += `_Klik atau salin teks di bawah untuk salin CN!_\n`;
-
-            groupCn.list.forEach((item, index) => {
-                let formattedNick = `${baseName} ${item}`;
-                responseText += `\n${index + 1}. \`\`\`${formattedNick}\`\`\``;
-            });
-
-            responseText += `\n\n*Panduan Setting:*` +
-                            `\n• \`.cn <nama>\` — generate CN` +
-                            `\n• \`.cn add <A|B|C>\` — tambah` +
-                            `\n• \`.cn font <1-4>\` — ganti font` +
-                            `\n• \`.cn del <no>\` — hapus`;
-
-            await sock.sendMessage(from, { text: responseText }, { quoted: msg });
         }
 
         // ==========================================
@@ -625,7 +504,7 @@ async function connectToWhatsApp() {
         // ==========================================
         // FITUR RPG (Role-Playing Game)
         // ==========================================
-        else if (['.rpg', '.status', '.profile', '.pilihjob', '.adventure', '.hunt', '.heal', '.leaderboard', '.toprpg'].includes(command)) {
+        else if (['rpg', 'status', 'profile', 'pilihjob', 'adventure', 'hunt', 'heal', 'leaderboard', 'toprpg'].includes(command)) {
             let rpgDb = loadRpgDb();
             if (!rpgDb[senderNumber]) {
                 rpgDb[senderNumber] = {
@@ -643,7 +522,7 @@ async function connectToWhatsApp() {
             }
             let player = rpgDb[senderNumber];
 
-            if (command === '.rpg' || command === '.status' || command === '.profile') {
+            if (command === 'rpg' || command === 'status' || command === 'profile') {
                 let txt = `⚔️ *RPG PROFILE* ⚔️\n\n` +
                           `👤 *Nama:* ${player.name}\n` +
                           `🛡️ *Job:* ${player.job ? player.job.toUpperCase() : 'Belum Memilih (.pilihjob)'}\n` +
@@ -656,7 +535,7 @@ async function connectToWhatsApp() {
                           `_Ketik .adventure untuk mulai berburu!_`;
                 await sock.sendMessage(from, { text: txt }, { quoted: msg });
             } 
-            else if (command === '.pilihjob') {
+            else if (command === 'pilihjob') {
                 let choice = args[0] ? args[0].toLowerCase() : '';
                 if (player.job) {
                     return sock.sendMessage(from, { text: `⚠️ Kamu sudah memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
@@ -678,7 +557,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: `🎉 Berhasil memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
             }
-            else if (command === '.adventure' || command === '.hunt') {
+            else if (command === 'adventure' || command === 'hunt') {
                 if (!player.job) {
                     return sock.sendMessage(from, { text: `⚠️ Pilih job kamu dulu dengan *.pilihjob [warrior/mage/archer]*` }, { quoted: msg });
                 }
@@ -719,7 +598,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: textResult }, { quoted: msg });
             }
-            else if (command === '.heal') {
+            else if (command === 'heal') {
                 let cost = 20;
                 if (player.gold < cost) return sock.sendMessage(from, { text: `💰 Gold kurang! Biaya heal ${cost} Gold.` }, { quoted: msg });
                 if (player.hp === player.maxHp) return sock.sendMessage(from, { text: `❤️ HP sudah penuh!` }, { quoted: msg });
@@ -729,7 +608,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: `🏥 Berhasil berobat seharga ${cost} Gold. HP kembali penuh!` }, { quoted: msg });
             }
-            else if (command === '.leaderboard' || command === '.toprpg') {
+            else if (command === 'leaderboard' || command === 'toprpg') {
                 let sorted = Object.values(rpgDb).sort((a, b) => b.level - a.level || b.gold - a.gold).slice(0, 5);
                 let text = `🏆 *TOP 5 LEADERBOARD RPG* 🏆\n\n`;
                 sorted.forEach((p, i) => {
@@ -761,6 +640,7 @@ async function connectToWhatsApp() {
 
                 // Handler khusus untuk fitur .masukin dengan dukungan format +62 831-6609-3861
                 if (command === '.masukin') {
+                    // Mengambil seluruh argumen setelah .masukin lalu membuang semua karakter selain angka
                     const fullArgs = args.join('');
                     const targetNumberInput = fullArgs.replace(/[^0-9]/g, '');
 
