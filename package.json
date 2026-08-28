@@ -1,5 +1,4 @@
-cat << 'EOF' > package.json
-{
+rm -f package.json && echo '{
   "name": "bot-wa",
   "version": "1.0.0",
   "description": "WhatsApp Bot",
@@ -14,5 +13,4 @@ cat << 'EOF' > package.json
     "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0"
   }
-}
-EOF
+}' > package.json
