@@ -1,9 +1,10 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const axios = require('axios');
-const fs = require('fs');
+import pkg from '@whiskeysockets/baileys';
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = pkg;
+import { pino } from 'pino';
+import qrcode from 'qrcode-terminal';
+import { Sticker, StickerTypes } from 'wa-sticker-formatter';
+import axios from 'axios';
+import fs from 'fs';
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
@@ -256,7 +257,7 @@ async function connectToWhatsApp() {
                     };
                 }
 
-                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer kosong.');
@@ -311,7 +312,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer stiker kosong.');
@@ -371,7 +372,7 @@ async function connectToWhatsApp() {
                     message: qMsg
                 };
 
-                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {}, { logger: pino({ level: 'silent' }) });
 
                 if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer media kosong.');
