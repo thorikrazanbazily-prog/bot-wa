@@ -179,7 +179,7 @@ async function connectToWhatsApp() {
 
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
-* ➔ *.add +62 xxx-xxxx-xxxx* : Menambahkan member ke grup
+* ➔ *.masukin +62 831-6609-3861* : Menambahkan member ke grup
 * ➔ *.ewein @user* : Mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
 
@@ -619,9 +619,9 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-        // FITUR GRUP (.add, .ewein, .promote, .demote)
+        // FITUR GRUP (.masukin, .ewein, .promote, .demote)
         // ==========================================
-        else if (['.add', '.ewein', '.promote', '.demote'].includes(command)) {
+        else if (['.masukin', '.ewein', '.promote', '.demote'].includes(command)) {
             if (!isGroup) {
                 return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
             }
@@ -638,14 +638,14 @@ async function connectToWhatsApp() {
                     return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup* atau *Owner*!' }, { quoted: msg });
                 }
 
-                // Handler khusus untuk fitur .add dengan dukungan format +62 831-6609-3861
-                if (command === '.add') {
-                    // Mengambil seluruh argumen setelah .add lalu membuang semua karakter selain angka
+                // Handler khusus untuk fitur .masukin dengan dukungan format +62 831-6609-3861
+                if (command === '.masukin') {
+                    // Mengambil seluruh argumen setelah .masukin lalu membuang semua karakter selain angka
                     const fullArgs = args.join('');
                     const targetNumberInput = fullArgs.replace(/[^0-9]/g, '');
 
                     if (!targetNumberInput || targetNumberInput.length < 10) {
-                        return sock.sendMessage(from, { text: '⚠️ Masukkan nomor dengan benar!\nContoh: *.add +62 831-6609-3861*' }, { quoted: msg });
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan nomor dengan benar!\nContoh: *.masukin +62 831-6609-3861*' }, { quoted: msg });
                     }
 
                     const targetJid = targetNumberInput + '@s.whatsapp.net';
@@ -660,7 +660,7 @@ async function connectToWhatsApp() {
 
                         await sock.sendMessage(from, { text: `✅ Berhasil menambahkan @${targetNumberInput} ke dalam grup.`, mentions: [targetJid] }, { quoted: msg });
                     } catch (addErr) {
-                        console.error('Error Add Participant:', addErr);
+                        console.error('Error Masukin Participant:', addErr);
                         await sock.sendMessage(from, { text: '❌ Gagal menambahkan member. Pastikan nomor valid dan menggunakan format kode negara.' }, { quoted: msg });
                     }
                     return;
