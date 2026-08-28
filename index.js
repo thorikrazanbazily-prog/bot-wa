@@ -36,7 +36,6 @@ async function connectToWhatsApp() {
             const msg = m.messages[0];
             if (!msg.message) return;
 
-            // Debugging: melihat data pesan yang masuk di terminal
             const from = msg.key.remoteJid;
             const text = msg.message.conversation || 
                          msg.message.extendedTextMessage?.text || 
@@ -50,19 +49,7 @@ async function connectToWhatsApp() {
 
             if (command === '.menu' || command === '.popup' || command === '.button') {
                 await sock.sendMessage(from, {
-                    text: "✨ *MENU UTAMA BOT RIQ* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
-                    footer: "Bot Riq Imup",
-                    buttons: [
-                        {
-                            name: "cta_url",
-                            buttonParamsJson: JSON.stringify({
-                                display_text: "🌐 Kunjungi Website",
-                                id: "url_btn",
-                                url: "https://whatsapp.com"
-                            })
-                        }
-                    ],
-                    headerType: 1
+                    text: "✨ *MENU PILIHAN FORMAT NAMA* ✨\n\nSilakan pilih opsi di bawah ini:\n\n1. K– Angga\n2. 水 Angga\n3. Angga Kaguya"
                 }, { quoted: msg });
             }
         } catch (error) {
