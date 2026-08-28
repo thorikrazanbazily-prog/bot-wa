@@ -504,7 +504,7 @@ async function connectToWhatsApp() {
         // ==========================================
         // FITUR RPG (Role-Playing Game)
         // ==========================================
-        else if (['rpg', 'status', 'profile', 'pilihjob', 'adventure', 'hunt', 'heal', 'leaderboard', 'toprpg'].includes(command)) {
+        else if (['.rpg', '.status', '.profile', '.pilihjob', '.adventure', '.hunt', '.heal', '.leaderboard', '.toprpg'].includes(command)) {
             let rpgDb = loadRpgDb();
             if (!rpgDb[senderNumber]) {
                 rpgDb[senderNumber] = {
@@ -522,7 +522,7 @@ async function connectToWhatsApp() {
             }
             let player = rpgDb[senderNumber];
 
-            if (command === 'rpg' || command === 'status' || command === 'profile') {
+            if (command === '.rpg' || command === '.status' || command === '.profile') {
                 let txt = `⚔️ *RPG PROFILE* ⚔️\n\n` +
                           `👤 *Nama:* ${player.name}\n` +
                           `🛡️ *Job:* ${player.job ? player.job.toUpperCase() : 'Belum Memilih (.pilihjob)'}\n` +
@@ -535,7 +535,7 @@ async function connectToWhatsApp() {
                           `_Ketik .adventure untuk mulai berburu!_`;
                 await sock.sendMessage(from, { text: txt }, { quoted: msg });
             } 
-            else if (command === 'pilihjob') {
+            else if (command === '.pilihjob') {
                 let choice = args[0] ? args[0].toLowerCase() : '';
                 if (player.job) {
                     return sock.sendMessage(from, { text: `⚠️ Kamu sudah memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
@@ -557,7 +557,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: `🎉 Berhasil memilih job *${player.job.toUpperCase()}*!` }, { quoted: msg });
             }
-            else if (command === 'adventure' || command === 'hunt') {
+            else if (command === '.adventure' || command === '.hunt') {
                 if (!player.job) {
                     return sock.sendMessage(from, { text: `⚠️ Pilih job kamu dulu dengan *.pilihjob [warrior/mage/archer]*` }, { quoted: msg });
                 }
@@ -598,7 +598,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: textResult }, { quoted: msg });
             }
-            else if (command === 'heal') {
+            else if (command === '.heal') {
                 let cost = 20;
                 if (player.gold < cost) return sock.sendMessage(from, { text: `💰 Gold kurang! Biaya heal ${cost} Gold.` }, { quoted: msg });
                 if (player.hp === player.maxHp) return sock.sendMessage(from, { text: `❤️ HP sudah penuh!` }, { quoted: msg });
@@ -608,7 +608,7 @@ async function connectToWhatsApp() {
                 saveRpgDb(rpgDb);
                 await sock.sendMessage(from, { text: `🏥 Berhasil berobat seharga ${cost} Gold. HP kembali penuh!` }, { quoted: msg });
             }
-            else if (command === 'leaderboard' || command === 'toprpg') {
+            else if (command === '.leaderboard' || command === '.toprpg') {
                 let sorted = Object.values(rpgDb).sort((a, b) => b.level - a.level || b.gold - a.gold).slice(0, 5);
                 let text = `🏆 *TOP 5 LEADERBOARD RPG* 🏆\n\n`;
                 sorted.forEach((p, i) => {
@@ -640,7 +640,6 @@ async function connectToWhatsApp() {
 
                 // Handler khusus untuk fitur .masukin dengan dukungan format +62 831-6609-3861
                 if (command === '.masukin') {
-                    // Mengambil seluruh argumen setelah .masukin lalu membuang semua karakter selain angka
                     const fullArgs = args.join('');
                     const targetNumberInput = fullArgs.replace(/[^0-9]/g, '');
 
