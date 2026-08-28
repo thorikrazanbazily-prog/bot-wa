@@ -46,24 +46,29 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-         if (command === '.button' || command === '.menu') {
+                 if (command === '.menu' || command === '.popup') {
             const sections = [
                 {
-                    title: "Pilih Opsi Nama / Teks",
+                    title: "Kategori Pilihan",
                     rows: [
-                        { title: "K– Angga", rowId: "opt_1", description: "Salin format K– Angga" },
-                        { title: "水 Angga", rowId: "opt_2", description: "Salin format 水 Angga" },
-                        { title: "Angga 水", rowId: "opt_3", description: "Salin format Angga 水" },
-                        { title: "Angga ft KGY", rowId: "opt_4", description: "Salin format Angga ft KGY" },
-                        { title: "Angga Kaguya", rowId: "opt_5", description: "Salin format Angga Kaguya" }
+                        { 
+                            title: "Opsi Pertama", 
+                            rowId: "opt_1", 
+                            description: "Deskripsi singkat untuk opsi pertama" 
+                        },
+                        { 
+                            title: "Opsi Kedua", 
+                            rowId: "opt_2", 
+                    description: "Deskripsi singkat untuk opsi kedua" 
+                        }
                     ]
                 }
             ];
 
             const listMessage = {
-                text: "✨ *SILAKAN PILIH FORMAT DI BAWAH* ✨\n\nKlik tombol menu untuk menampilkan daftar opsi pilihan teks:",
+                text: "✨ *MENU POP-UP INTERAKTIF* ✨\n\nSilakan klik tombol di bawah ini untuk membuka daftar pilihan:",
                 footer: "Bot Riq Imup",
-                title: "Daftar Pilihan",
+                title: "Judul Pop-up",
                 buttonText: "Klik Disini",
                 sections
             };
