@@ -146,7 +146,7 @@ async function connectToWhatsApp() {
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
             isPublicMode = false;
             saveSettings(isPublicMode);
-            return sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke *MODE PRIVATE*.\n\nHanya Owner dan daftar nomor VIP yang dapat menggunakan bot.' }, { quoted: msg });
+            return sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke *MODE PRIVATE*.\n\Hanya Owner dan daftar nomor VIP yang dapat menggunakan bot.' }, { quoted: msg });
         } 
         else if (command === '.publik' || command === '.public') {
             if (!isOwner) return sock.sendMessage(from, { text: '❌ Perintah ini hanya untuk *Owner Bot*!' }, { quoted: msg });
@@ -177,7 +177,7 @@ async function connectToWhatsApp() {
 
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
-* ➔ *.kick @user* : Mengeluarkan member dari grup
+* ➔ *.ewein @user* : Mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
 
 🎵 *VERIFIKASI TIKTOK*
@@ -593,7 +593,7 @@ async function connectToWhatsApp() {
 
                 const targetNumber = extractNumber(targetJid);
 
-                if (command === '.kick') {
+                if (command === '.ewein') {
                     await sock.groupParticipantsUpdate(from, [targetJid], 'remove');
                     await sock.sendMessage(from, { text: `✅ Berhasil mengeluarkan @${targetNumber}.`, mentions: [targetJid] }, { quoted: msg });
                 } 
@@ -614,3 +614,4 @@ async function connectToWhatsApp() {
 }
 
 connectToWhatsApp();
+
