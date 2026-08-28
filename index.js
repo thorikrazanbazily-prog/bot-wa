@@ -46,34 +46,29 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-                 if (command === '.menu' || command === '.popup') {
-            const sections = [
-                {
-                    title: "Kategori Pilihan",
-                    rows: [
-                        { 
-                            title: "Opsi Pertama", 
-                            rowId: "opt_1", 
-                            description: "Deskripsi singkat untuk opsi pertama" 
-                        },
-                        { 
-                            title: "Opsi Kedua", 
-                            rowId: "opt_2", 
-                    description: "Deskripsi singkat untuk opsi kedua" 
-                        }
-                    ]
-                }
-            ];
-
-            const listMessage = {
-                text: "✨ *MENU POP-UP INTERAKTIF* ✨\n\nSilakan klik tombol di bawah ini untuk membuka daftar pilihan:",
+        if (command === '.menu' || command === '.popup' || command === '.button') {
+            await sock.sendMessage(from, {
+                text: "✨ *MENU POP-UP INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi di bawah ini:",
                 footer: "Bot Riq Imup",
-                title: "Judul Pop-up",
-                buttonText: "Klik Disini",
-                sections
-            };
-
-            await sock.sendMessage(from, listMessage, { quoted: msg });
+                buttons: [
+                    {
+                        buttonId: "opt_1",
+                        buttonText: { displayText: "📋 K– Angga" },
+                        type: 1
+                    },
+                    {
+                        buttonId: "opt_2",
+                        buttonText: { displayText: "📋 水 Angga" },
+                        type: 1
+                    },
+                    {
+                        buttonId: "opt_3",
+                        buttonText: { displayText: "📋 Angga Kaguya" },
+                        type: 1
+                    }
+                ],
+                headerType: 1
+            }, { quoted: msg });
         }
     });
 }
