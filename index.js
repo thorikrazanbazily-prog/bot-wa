@@ -46,29 +46,26 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-         if (command === '.button' || command === '.menu') {
-            await sock.sendMessage(from, {
-                text: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
+                 if (command === '.button' || command === '.menu') {
+            const sections = [
+                {
+                    title: "Pilihan Menu Utama",
+                    rows: [
+                        { title: "Salin Kode Voucher", rowId: "copy_voucher_1", description: "Klik untuk menyalin kode voucher" },
+                        { title: "Kunjungi Website", rowId: "url_btn", description: "Membuka link website resmi" }
+                    ]
+                }
+            ];
+
+            const listMessage = {
+                text: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan klik tombol di bawah untuk melihat pilihan opsi:",
                 footer: "Bot Riq Imup",
-                buttons: [
-                    {
-                        name: "cta_copy",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "📋 Salin Kode Voucher",
-                            id: "copy_voucher_1",
-                            copy_code: "RIQIMUP2026"
-                        })
-                    },
-                    {
-                        name: "cta_url",
-                        buttonParamsJson: JSON.stringify({
-                            display_text: "🌐 Kunjungi Website",
-                            id: "url_btn",
-                            url: "https://whatsapp.com"
-                        })
-                    }
-                ]
-            }, { quoted: msg });
+                title: "Daftar Menu",
+                buttonText: "Klik Disini",
+                sections
+            };
+
+            await sock.sendMessage(from, listMessage, { quoted: msg });
         }
     });
 }
