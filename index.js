@@ -46,31 +46,39 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-        if (command === '.button' || command === '.menu') {
+                if (command === '.button' || command === '.menu') {
             await sock.sendMessage(from, {
-                interactiveMessage: {
-                    title: "✨ *MENU PESAN INTERAKTIF* ✨",
-                    body: "Silakan pilih salah satu opsi tombol di bawah ini:",
-                    footer: "Bot Riq Imup",
-                    buttons: [
-                        {
+                text: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan pilih salah satu opsi tombol di bawah ini:",
+                footer: "Bot Riq Imup",
+                buttons: [
+                    {
+                        buttonId: "copy_voucher_1",
+                        buttonText: { displayText: "📋 Salin Kode Voucher" },
+                        type: 1,
+                        nativeFlowInfo: {
                             name: "cta_copy",
-                            buttonParamsJson: JSON.stringify({
+                            paramsJson: JSON.stringify({
                                 display_text: "📋 Salin Kode Voucher",
                                 id: "copy_voucher_1",
                                 copy_code: "RIQIMUP2026"
                             })
-                        },
-                        {
+                        }
+                    },
+                    {
+                        buttonId: "url_btn",
+                        buttonText: { displayText: "🌐 Kunjungi Website" },
+                        type: 1,
+                        nativeFlowInfo: {
                             name: "cta_url",
-                            buttonParamsJson: JSON.stringify({
+                            paramsJson: JSON.stringify({
                                 display_text: "🌐 Kunjungi Website",
                                 id: "url_btn",
                                 url: "https://whatsapp.com"
                             })
                         }
-                    ]
-                }
+                    }
+                ],
+                headerType: 1
             }, { quoted: msg });
         }
     });
