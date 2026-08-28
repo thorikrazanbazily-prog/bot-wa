@@ -15,6 +15,7 @@ const VIP_NUMBERS = ['6285722869044', '63801957298267', '6282126168799'];     //
 const SETTINGS_FILE = 'bot_settings.json';
 const DB_VERIF_FILE = 'verified_users.json';
 const DB_RPG_FILE = 'rpg.json';
+const CN_DB_FILE = 'cn_generator.json';
 
 // Fungsi membaca settingan bot
 const loadSettings = () => {
@@ -79,6 +80,26 @@ const saveRpgDb = (db) => {
         fs.writeFileSync(DB_RPG_FILE, JSON.stringify(db, null, 2));
     } catch (e) {
         console.error('Gagal menyimpan database RPG:', e);
+    }
+};
+
+// Fungsi Database CN Generator
+const loadCnDb = () => {
+    try {
+        if (fs.existsSync(CN_DB_FILE)) {
+            return JSON.parse(fs.readFileSync(CN_DB_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Gagal membaca DB CN:', e);
+    }
+    return {};
+};
+
+const saveCnDb = (db) => {
+    try {
+        fs.writeFileSync(CN_DB_FILE, JSON.stringify(db, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan DB CN:', e);
     }
 };
 
@@ -413,34 +434,8 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-// DATABASE & STATE SEMENTARA UNTUK CN GENERATOR
-// ==========================================
-const CN_DB_FILE = 'cn_generator.json';
-
-const loadCnDb = () => {
-    try {
-        if (fs.existsSync(CN_DB_FILE)) {
-            return JSON.parse(fs.readFileSync(CN_DB_FILE, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Gagal membaca DB CN:', e);
-    }
-    return {}; // Format: { groupId: { font: 1, list: ["KGY", "水", "ft kgy"] } }
-};
-
-const saveCnDb = (db) => {
-    try {
-        fs.writeFileSync(CN_DB_FILE, JSON.stringify(db, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan DB CN:', e);
-    }
-};
-
-// ==========================================
-// PASANG KODE INI DI DALAM HANDLER MESSAGES.UPSERT
-// ==========================================
-
-        // FITUR CN GENERATOR INTERAKTIF
+        // FITUR CN GENERATOR INTERAKTIF (.cn)
+        // ==========================================
         else if (command === '.cn') {
             let cnDb = loadCnDb();
             if (!cnDb[from]) {
@@ -490,22 +485,13 @@ const saveCnDb = (db) => {
 
             // Jika hanya mengetik .cn atau .cn <nama_custom>
             let customName = args.join(' ');
-            // Jika user mengetik .cn Kaguya (artinya mau generate dengan teks tertentu)
             let baseName = customName && !['add', 'del', 'font', 'clear'].includes(subCommand) ? customName : '1';
-
-            // Fungsi pengubah gaya font sederhana
-            const applyFont = (text, type) => {
-                if (type === 2) return text.split('').map(c => c.toLowerCase()).join(''); // contoh ubah
-                return text;
-            };
 
             let responseText = `✨ *CN Generator*\n\n`;
             responseText += `👤 Nama : ${baseName}\n`;
             responseText += `abc Font : ${groupCn.font}\n\n`;
-            responseText += `_Klik tombol atau salin teks di bawah untuk salin CN!_\n`;
+            responseText += `_Klik atau salin teks di bawah untuk salin CN!_\n`;
 
-            // Membuat tombol interaktif / list salin menggunakan format Baileys / teks terstruktur rapi
-            // Catatan: Tombol bailey interaktif tergantung versi baileys, kita buat format teks interaktif box copy yang sangat rapi ala bot Store:
             groupCn.list.forEach((item, index) => {
                 let formattedNick = `${baseName} ${item}`;
                 responseText += `\n${index + 1}. \`\`\`${formattedNick}\`\`\``;
@@ -519,7 +505,6 @@ const saveCnDb = (db) => {
 
             await sock.sendMessage(from, { text: responseText }, { quoted: msg });
         }
-
 
         // ==========================================
         // FITUR VERIFIKASI TIKTOK (.verif) - MAX 1 AKUN
@@ -813,4 +798,3 @@ const saveCnDb = (db) => {
 }
 
 connectToWhatsApp();
-
