@@ -83,16 +83,27 @@ const saveRpgDb = (db) => {
     }
 };
 
-// Fungsi Database Nickname (.cn)
+// Fungsi Database Nickname (.cn) DENGAN DEFAULT KGY
 const loadCnDb = () => {
     try {
         if (fs.existsSync(DB_CN_FILE)) {
-            return JSON.parse(fs.readFileSync(DB_CN_FILE, 'utf8'));
+            const data = JSON.parse(fs.readFileSync(DB_CN_FILE, 'utf8'));
+            return data;
         }
     } catch (e) {
         console.error('Gagal membaca database CN:', e);
     }
-    return {};
+    
+    // Default awal jika file belum ada, langsung menyertakan KGY
+    const defaultDb = {
+        "kgy_default": {
+            name: "KGY Official",
+            nickname: "1.kgy",
+            updatedAt: "Sistem Preset"
+        }
+    };
+    saveCnDb(defaultDb);
+    return defaultDb;
 };
 
 const saveCnDb = (db) => {
@@ -228,113 +239,72 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-// DATABASE NICKNAME (.cn) DENGAN DEFAULT KGY
-// ==========================================
-const DB_CN_FILE = 'nicknames.json';
+        // FITUR NICKNAME (.cn, .mycn, .listcn)
+        // ==========================================
+        else if (command === '.cn') {
+            let nickArgs = args.join(' ');
+            
+            if (nickArgs.toLowerCase() === 'kgy' || nickArgs.toLowerCase() === '1.kgy') {
+                nickArgs = '1.kgy';
+            }
 
-const loadCnDb = () => {
-    try {
-        if (fs.existsSync(DB_CN_FILE)) {
-            const data = JSON.parse(fs.readFileSync(DB_CN_FILE, 'utf8'));
-            return data;
-        }
-    } catch (e) {
-        console.error('Gagal membaca database CN:', e);
-    }
-    
-    // Default awal jika file belum ada, langsung menyertakan KGY
-    const defaultDb = {
-        "kgy_default": {
-            name: "KGY Official",
-            nickname: "1.kgy",
-            updatedAt: "Sistem Preset"
-        }
-    };
-    saveCnDb(defaultDb);
-    return defaultDb;
-};
+            if (!nickArgs) {
+                return sock.sendMessage(from, { text: '⚠️ Masukkan nickname yang ingin disimpan!\nContoh: *.cn RiqzXz* atau *.cn 1.kgy*' }, { quoted: msg });
+            }
 
-const saveCnDb = (db) => {
-    try {
-        fs.writeFileSync(DB_CN_FILE, JSON.stringify(db, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan database CN:', e);
-    }
-};
+            let cnDb = loadCnDb();
+            cnDb[senderNumber] = {
+                name: msg.pushName || 'User',
+                nickname: nickArgs,
+                updatedAt: new Date().toLocaleString('id-ID')
+            };
+            saveCnDb(cnDb);
 
-// ==========================================
-// HANDLER PERINTAH CN
-// ==========================================
-
-// 1. Fitur .cn (Menyimpan atau mengganti nickname, support .cn 1.kgy)
-if (command === '.cn') {
-    let nickArgs = args.join(' ');
-    
-    if (nickArgs.toLowerCase() === 'kgy' || nickArgs.toLowerCase() === '1.kgy') {
-        nickArgs = '1.kgy';
-    }
-
-    if (!nickArgs) {
-        return sock.sendMessage(from, { text: '⚠️ Masukkan nickname yang ingin disimpan!\nContoh: *.cn RiqzXz* atau *.cn 1.kgy*' }, { quoted: msg });
-    }
-
-    let cnDb = loadCnDb();
-    cnDb[senderNumber] = {
-        name: msg.pushName || 'User',
-        nickname: nickArgs,
-        updatedAt: new Date().toLocaleString('id-ID')
-    };
-    saveCnDb(cnDb);
-
-    let successText = 
-✅ *BERHASIL MENYIMPAN NICKNAME*
+            let successText = 
+`✅ *BERHASIL MENYIMPAN NICKNAME*
 
 👤 *Nama:* ${msg.pushName || 'User'}
 ✨ *Nick:* ${nickArgs}
 
 _Tips: Cukup ketuk (tap) teks di bawah ini untuk menyalin dengan cepat (Quick Copy), lalu gunakan untuk chat!_
-\`\`\`${nickArgs}\`\`\`;
+\`\`\`${nickArgs}\`\`\``;
 
-    await sock.sendMessage(from, { text: successText }, { quoted: msg });
-}
+            await sock.sendMessage(from, { text: successText }, { quoted: msg });
+        }
+        else if (command === '.mycn') {
+            let cnDb = loadCnDb();
+            if (!cnDb[senderNumber]) {
+                return sock.sendMessage(from, { text: '⚠️ Kamu belum mengatur nickname. Gunakan perintah *.cn <nickname>* terlebih dahulu!' }, { quoted: msg });
+            }
 
-// 2. Fitur .mycn (Melihat nickname sendiri)
-else if (command === '.mycn') {
-    let cnDb = loadCnDb();
-    if (!cnDb[senderNumber]) {
-        return sock.sendMessage(from, { text: '⚠️ Kamu belum mengatur nickname. Gunakan perintah *.cn <nickname>* terlebih dahulu!' }, { quoted: msg });
-    }
-
-    let data = cnDb[senderNumber];
-    let myText = 
+            let data = cnDb[senderNumber];
+            let myText = 
 `👤 *NICKNAME ANDA*
 
 ✨ *Nick:* ${data.nickname}
 🕒 *Terakhir Diubah:* ${data.updatedAt}
 
 _Klik/tap teks di bawah untuk menyalin:_
-\`\`\`${data.nickname}\`\`\`;
+\`\`\`${data.nickname}\`\`\``;
 
-    await sock.sendMessage(from, { text: myText }, { quoted: msg });
-}
+            await sock.sendMessage(from, { text: myText }, { quoted: msg });
+        }
+        else if (command === '.listcn' || command === '.cnlist') {
+            let cnDb = loadCnDb();
+            let keys = Object.keys(cnDb);
+            if (keys.length === 0) {
+                return sock.sendMessage(from, { text: '⚠️ Belum ada nickname yang tersimpan di database.' }, { quoted: msg });
+            }
 
-// 3. Fitur .listcn (Melihat daftar seluruh nickname termasuk KGY)
-else if (command === '.listcn' || command === '.cnlist') {
-    let cnDb = loadCnDb();
-    let keys = Object.keys(cnDb);
-    if (keys.length === 0) {
-        return sock.sendMessage(from, { text: '⚠️ Belum ada nickname yang tersimpan di database.' }, { quoted: msg });
-    }
+            let textList = `📋 *DAFTAR NICKNAME TERPANTAU* 📋\n\n`;
+            keys.forEach((num, index) => {
+                let item = cnDb[num];
+                textList += `${index + 1}. *${item.name}* \n   ➔ Nick: \`${item.nickname}\`\n\n`;
+            });
+            textList += `_Gunakan *.cn <nickname>* untuk menambahkan atau memperbarui milikmu sendiri._`;
 
-    let textList = `📋 *DAFTAR NICKNAME TERPANTAU* 📋\n\n`;
-    keys.forEach((num, index) => {
-        let item = cnDb[num];
-        textList += `${index + 1}. *${item.name}* \n   ➔ Nick: \`${item.nickname}\`\n\n`;
-    });
-    textList += `_Gunakan *.cn <nickname>* untuk menambahkan atau memperbarui milikmu sendiri._`;
-
-    await sock.sendMessage(from, { text: textList }, { quoted: msg });
-}
+            await sock.sendMessage(from, { text: textList }, { quoted: msg });
+        }
 
         // ==========================================
         // FITUR STIKER (.sticker / .stiker / .s)
@@ -838,3 +808,4 @@ else if (command === '.listcn' || command === '.cnlist') {
 }
 
 connectToWhatsApp();
+
