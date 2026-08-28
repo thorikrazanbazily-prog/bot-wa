@@ -15,7 +15,6 @@ const VIP_NUMBERS = ['6285722869044', '63801957298267', '6282126168799'];     //
 const SETTINGS_FILE = 'bot_settings.json';
 const DB_VERIF_FILE = 'verified_users.json';
 const DB_RPG_FILE = 'rpg.json';
-const DB_CN_FILE = 'nicknames.json'; // Database untuk fitur .cn
 
 // Fungsi membaca settingan bot
 const loadSettings = () => {
@@ -80,35 +79,6 @@ const saveRpgDb = (db) => {
         fs.writeFileSync(DB_RPG_FILE, JSON.stringify(db, null, 2));
     } catch (e) {
         console.error('Gagal menyimpan database RPG:', e);
-    }
-};
-
-// Fungsi Database Nickname (.cn) DENGAN DEFAULT KGY
-const loadCnDb = () => {
-    try {
-        if (fs.existsSync(DB_CN_FILE)) {
-            const data = JSON.parse(fs.readFileSync(DB_CN_FILE, 'utf8'));
-            return data;
-        }
-    } catch (e) {
-        console.error('Gagal membaca database CN:', e);
-    }
-    
-    // Default awal jika file belum ada, langsung menyertakan KGY dan beberapa contoh preset nickname
-    const defaultDb = {
-        "1": { name: "KGY Official", nickname: "1.kgy" },
-        "2": { name: "Preset Squad", nickname: "ZannXz" },
-        "3": { name: "Preset VVIP", nickname: "RiqzXz" }
-    };
-    saveCnDb(defaultDb);
-    return defaultDb;
-};
-
-const saveCnDb = (db) => {
-    try {
-        fs.writeFileSync(DB_CN_FILE, JSON.stringify(db, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan database CN:', e);
     }
 };
 
@@ -212,9 +182,7 @@ async function connectToWhatsApp() {
 * ➔ *.masukin +62 831-6609-3861* : Menambahkan member ke grup
 * ➔ *.ewein @user* : Mencopot/mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
-
-📝 *NICKNAME LIST (QUICK CHAT)*
-* ➔ *.cn* : Menampilkan daftar preset nickname siap salin (Quick Copy)
+* ➔ *.cn <nick1, nick2, ...>* : Membuat list nick siap copy
 
 🎵 *VERIFIKASI TIKTOK*
 * ➔ *.verif <username>* : Verifikasi akun TikTok (Maks 1)
@@ -232,29 +200,6 @@ async function connectToWhatsApp() {
         else if (command === '.ping') {
             const start = Date.now();
             await sock.sendMessage(from, { text: `🏓 *Pong!*\n⚡ Kecepatan respon: *${Date.now() - start} ms*` }, { quoted: msg });
-        }
-
-        // ==========================================
-        // FITUR NICKNAME (.cn) - DAFTAR & QUICK CHAT
-        // ==========================================
-        else if (command === '.cn') {
-            let cnDb = loadCnDb();
-            let keys = Object.keys(cnDb);
-            
-            if (keys.length === 0) {
-                return sock.sendMessage(from, { text: '⚠️ Belum ada daftar nickname yang tersimpan di database.' }, { quoted: msg });
-            }
-
-            let textList = `📋 *DAFTAR NICKNAME (QUICK COPY)* 📋\n\n_Ketuk/tap teks di dalam kotak kode (monospace) di bawah untuk menyalin nickname dengan cepat:_\n\n`;
-            
-            keys.forEach((key, index) => {
-                let item = cnDb[key];
-                textList += `${index + 1}. *${item.name}*\n\`\`\`${item.nickname}\`\`\`\n\n`;
-            });
-
-            textList += `_Gunakan teks di atas untuk chat dengan cepat!_`;
-
-            await sock.sendMessage(from, { text: textList }, { quoted: msg });
         }
 
         // ==========================================
@@ -347,7 +292,7 @@ async function connectToWhatsApp() {
 
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
-                if (!mediaBuffer || mediaBuffer.length === 0) {
+                if (!mediaBuffer || mediaBuffer.length === '0') {
                     throw new Error('Buffer stiker kosong.');
                 }
 
@@ -442,7 +387,7 @@ async function connectToWhatsApp() {
                 const isSenderAdmin = adminNumbers.includes(senderNumber);
 
                 if (!isSenderAdmin && !isOwner && !isVIP) {
-                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
+                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup*, *Owner*, ou *VIP*!' }, { quoted: msg });
                 }
 
                 const qMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -465,6 +410,32 @@ async function connectToWhatsApp() {
                 console.error('Error Hidetag Detail:', err);
                 await sock.sendMessage(from, { text: '❌ Gagal mengeksekusi fitur hidetag.' }, { quoted: msg });
             }
+        }
+
+        // ==========================================
+        // FITUR COPY NICK / CN (.cn) - LIST NICK SIAP COPY
+        // ==========================================
+        else if (command === '.cn') {
+            const inputQuery = args.join(' ');
+            if (!inputQuery) {
+                return sock.sendMessage(from, { text: '⚠️ Masukkan daftar nickname yang ingin dibuat!\nContoh: *.cn Riq, Zann, Bot* (bisa dipisah koma atau baris baru)' }, { quoted: msg });
+            }
+
+            // Memisahkan berdasarkan koma atau baris baru
+            const nicks = inputQuery.split(/,|\n/).map(n => n.trim()).filter(n => n.length > 0);
+
+            if (nicks.length === 0) {
+                return sock.sendMessage(from, { text: '❌ Tidak ada nickname valid yang ditemukan.' }, { quoted: msg });
+            }
+
+            let resultText = `📋 *LIST NICKNAME (SIAP COPY)*\n_Klik teks di dalam kotak kode di bawah untuk menyalin:_\n\n`;
+            
+            nicks.forEach((nick, index) => {
+                // Menggunakan format code block ``` agar mudah dicopy di WhatsApp
+                resultText += `${index + 1}. \`\`\`${nick}\`\`\`\n`;
+            });
+
+            await sock.sendMessage(from, { text: resultText }, { quoted: msg });
         }
 
         // ==========================================
@@ -526,7 +497,7 @@ async function connectToWhatsApp() {
 📅 *Since Akun:* ${createTime}
 🎥 *Total Video:* ${totalVideo}
 ❤️ *Total Likes:* ${totalLikes}
-🔗 *Link:* https://www.tiktok.com/@${targetUsername}`;
+🔗 *Link:* [https://www.tiktok.com/@$](https://www.tiktok.com/@$){targetUsername}`;
 
                 const avatar = user.avatarMedium || user.avatarLarger || user.avatarThumb;
                 if (avatar) {
@@ -539,7 +510,7 @@ async function connectToWhatsApp() {
                 console.error('RapidAPI Error:', error?.message);
                 db[senderNumber] = username;
                 saveDatabase(db);
-                await sock.sendMessage(from, { text: `🎵 *Akun TikTok:* @${username}\n🔗 https://www.tiktok.com/@${username}\n\n✅ Berhasil diverifikasi (Fallback Mode).` }, { quoted: msg });
+                await sock.sendMessage(from, { text: `🎵 *Akun TikTok:* @${username}\n🔗 [https://www.tiktok.com/@$](https://www.tiktok.com/@$){username}\n\n✅ Berhasil diverifikasi (Fallback Mode).` }, { quoted: msg });
             }
         }
 
