@@ -46,21 +46,24 @@ async function connectToWhatsApp() {
         // ==========================================
         // PERINTAH UNTUK MENAMPILKAN TOMBOL (.button)
         // ==========================================
-                 if (command === '.button' || command === '.menu') {
+         if (command === '.button' || command === '.menu') {
             const sections = [
                 {
-                    title: "Pilihan Menu Utama",
+                    title: "Pilih Opsi Nama / Teks",
                     rows: [
-                        { title: "Salin Kode Voucher", rowId: "copy_voucher_1", description: "Klik untuk menyalin kode voucher" },
-                        { title: "Kunjungi Website", rowId: "url_btn", description: "Membuka link website resmi" }
+                        { title: "K– Angga", rowId: "opt_1", description: "Salin format K– Angga" },
+                        { title: "水 Angga", rowId: "opt_2", description: "Salin format 水 Angga" },
+                        { title: "Angga 水", rowId: "opt_3", description: "Salin format Angga 水" },
+                        { title: "Angga ft KGY", rowId: "opt_4", description: "Salin format Angga ft KGY" },
+                        { title: "Angga Kaguya", rowId: "opt_5", description: "Salin format Angga Kaguya" }
                     ]
                 }
             ];
 
             const listMessage = {
-                text: "✨ *MENU PESAN INTERAKTIF* ✨\n\nSilakan klik tombol di bawah untuk melihat pilihan opsi:",
+                text: "✨ *SILAKAN PILIH FORMAT DI BAWAH* ✨\n\nKlik tombol menu untuk menampilkan daftar opsi pilihan teks:",
                 footer: "Bot Riq Imup",
-                title: "Daftar Menu",
+                title: "Daftar Pilihan",
                 buttonText: "Klik Disini",
                 sections
             };
