@@ -164,7 +164,7 @@ async function connectToWhatsApp() {
         if (command === '.menu' || command === '.help') {
             const statusMode = isPublicMode ? '🌐 PUBLIK' : '🔒 PRIVATE';
             const menuText = 
-`🤖 *BOT WHATSAPP (BAILEYS)*
+`🤖 *BOT RIQ IMUP😳*
 📊 *Status Bot:* ${statusMode}
 
 📌 *PERINTAH UTAMA*
