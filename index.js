@@ -179,7 +179,7 @@ async function connectToWhatsApp() {
 
 👥 *GRUP & FITUR SPESIAL*
 * ➔ *.ah <pesan> / reply* : Hidetag (Mention seluruh member)
-* ➔ *.add <nomor>* : Menambahkan member ke grup
+* ➔ *.add +62 xxx-xxxx-xxxx* : Menambahkan member ke grup
 * ➔ *.ewein @user* : Mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
 
@@ -323,7 +323,6 @@ async function connectToWhatsApp() {
                     return sock.sendMessage(from, { text: '⚠️ Reply foto atau video sekali lihat (view once) yang ingin dibuka!' }, { quoted: msg });
                 }
 
-                // Mendeteksi berbagai jenis bungkus pesan view once (v1 atau v2)
                 const viewOnceMsg = qMsg.viewOnceMessage?.message || 
                                     qMsg.viewOnceMessageV2?.message || 
                                     qMsg.ephemeralMessage?.message?.viewOnceMessage?.message ||
@@ -340,7 +339,6 @@ async function connectToWhatsApp() {
 
                 await sock.sendMessage(from, { text: '⏳ Mengambil media view once...' }, { quoted: msg });
 
-                // Menyiapkan target pesan untuk di-download
                 const mediaTarget = {
                     key: {
                         remoteJid: from,
@@ -640,11 +638,14 @@ async function connectToWhatsApp() {
                     return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup* atau *Owner*!' }, { quoted: msg });
                 }
 
-                // Handler khusus untuk fitur .add (menambahkan nomor)
+                // Handler khusus untuk fitur .add dengan dukungan format +62 831-6609-3861
                 if (command === '.add') {
-                    let targetNumberInput = args[0] ? args[0].replace(/[^0-9]/g, '') : '';
-                    if (!targetNumberInput) {
-                        return sock.sendMessage(from, { text: '⚠️ Masukkan nomor yang ingin ditambahkan!\nContoh: *.add 628123456789*' }, { quoted: msg });
+                    // Mengambil seluruh argumen setelah .add lalu membuang semua karakter selain angka
+                    const fullArgs = args.join('');
+                    const targetNumberInput = fullArgs.replace(/[^0-9]/g, '');
+
+                    if (!targetNumberInput || targetNumberInput.length < 10) {
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan nomor dengan benar!\nContoh: *.add +62 831-6609-3861*' }, { quoted: msg });
                     }
 
                     const targetJid = targetNumberInput + '@s.whatsapp.net';
@@ -653,7 +654,6 @@ async function connectToWhatsApp() {
                         const response = await sock.groupParticipantsUpdate(from, [targetJid], 'add');
                         const resObj = response?.[0] || response;
                         
-                        // Cek status penambahan partisipan
                         if (resObj && resObj.status >= 400) {
                             return sock.sendMessage(from, { text: `❌ Gagal menambahkan member. WhatsApp membatasi penambahan jika user mengaktifkan privasi atau baru saja keluar.` }, { quoted: msg });
                         }
@@ -661,12 +661,12 @@ async function connectToWhatsApp() {
                         await sock.sendMessage(from, { text: `✅ Berhasil menambahkan @${targetNumberInput} ke dalam grup.`, mentions: [targetJid] }, { quoted: msg });
                     } catch (addErr) {
                         console.error('Error Add Participant:', addErr);
-                        await sock.sendMessage(from, { text: '❌ Gagal menambahkan member. Pastikan nomor valid dan berawalan kode negara (contoh: 62).' }, { quoted: msg });
+                        await sock.sendMessage(from, { text: '❌ Gagal menambahkan member. Pastikan nomor valid dan menggunakan format kode negara.' }, { quoted: msg });
                     }
                     return;
                 }
 
-                // Handler untuk .ewein, .promote, .demote yang memerlukan target user (mention atau reply)
+                // Handler untuk .ewein, .promote, .demote
                 let targetJid = null;
                 const mentioned = msg.message.extendedTextMessage?.contextInfo?.mentionedJid;
                 const quotedSender = msg.message.extendedTextMessage?.contextInfo?.participant;
