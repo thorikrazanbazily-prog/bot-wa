@@ -182,7 +182,7 @@ async function connectToWhatsApp() {
 * ➔ *.masukin +62 831-6609-3861* : Menambahkan member ke grup
 * ➔ *.ewein @user* : Mencopot/mengeluarkan member dari grup
 * ➔ *.promote / .demote @user* : Atur admin grup
-* ➔ *.cn <nick1, nick2, ...>* : Membuat list nick siap copy
+* ➔ *.cn* : Menampilkan list default nick siap copy
 
 🎵 *VERIFIKASI TIKTOK*
 * ➔ *.verif <username>* : Verifikasi akun TikTok (Maks 1)
@@ -292,7 +292,7 @@ async function connectToWhatsApp() {
 
                 const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
 
-                if (!mediaBuffer || mediaBuffer.length === '0') {
+                if (!mediaBuffer || mediaBuffer.length === 0) {
                     throw new Error('Buffer stiker kosong.');
                 }
 
@@ -387,7 +387,7 @@ async function connectToWhatsApp() {
                 const isSenderAdmin = adminNumbers.includes(senderNumber);
 
                 if (!isSenderAdmin && !isOwner && !isVIP) {
-                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup*, *Owner*, ou *VIP*!' }, { quoted: msg });
+                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
                 }
 
                 const qMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -413,29 +413,17 @@ async function connectToWhatsApp() {
         }
 
         // ==========================================
-        // FITUR COPY NICK / CN (.cn) - LIST NICK SIAP COPY
+        // FITUR CHANGE NICK (.cn)
         // ==========================================
         else if (command === '.cn') {
-            const inputQuery = args.join(' ');
-            if (!inputQuery) {
-                return sock.sendMessage(from, { text: '⚠️ Masukkan daftar nickname yang ingin dibuat!\nContoh: *.cn Riq, Zann, Bot* (bisa dipisah koma atau baris baru)' }, { quoted: msg });
-            }
+            const cnText = 
+`daftar cn (change nick)
+1. \`\`\`KGY\`\`\`
+2. \`\`\`水\`\`\`
+3. \`\`\`ft kgy\`\`\`
+untuk cn copy salah satu saja`;
 
-            // Memisahkan berdasarkan koma atau baris baru
-            const nicks = inputQuery.split(/,|\n/).map(n => n.trim()).filter(n => n.length > 0);
-
-            if (nicks.length === 0) {
-                return sock.sendMessage(from, { text: '❌ Tidak ada nickname valid yang ditemukan.' }, { quoted: msg });
-            }
-
-            let resultText = `📋 *LIST NICKNAME (SIAP COPY)*\n_Klik teks di dalam kotak kode di bawah untuk menyalin:_\n\n`;
-            
-            nicks.forEach((nick, index) => {
-                // Menggunakan format code block ``` agar mudah dicopy di WhatsApp
-                resultText += `${index + 1}. \`\`\`${nick}\`\`\`\n`;
-            });
-
-            await sock.sendMessage(from, { text: resultText }, { quoted: msg });
+            await sock.sendMessage(from, { text: cnText }, { quoted: msg });
         }
 
         // ==========================================
@@ -497,7 +485,7 @@ async function connectToWhatsApp() {
 📅 *Since Akun:* ${createTime}
 🎥 *Total Video:* ${totalVideo}
 ❤️ *Total Likes:* ${totalLikes}
-🔗 *Link:* [https://www.tiktok.com/@$](https://www.tiktok.com/@$){targetUsername}`;
+🔗 *Link:* https://www.tiktok.com/@${targetUsername}`;
 
                 const avatar = user.avatarMedium || user.avatarLarger || user.avatarThumb;
                 if (avatar) {
@@ -510,7 +498,7 @@ async function connectToWhatsApp() {
                 console.error('RapidAPI Error:', error?.message);
                 db[senderNumber] = username;
                 saveDatabase(db);
-                await sock.sendMessage(from, { text: `🎵 *Akun TikTok:* @${username}\n🔗 [https://www.tiktok.com/@$](https://www.tiktok.com/@$){username}\n\n✅ Berhasil diverifikasi (Fallback Mode).` }, { quoted: msg });
+                await sock.sendMessage(from, { text: `🎵 *Akun TikTok:* @${username}\n🔗 https://www.tiktok.com/@${username}\n\n✅ Berhasil diverifikasi (Fallback Mode).` }, { quoted: msg });
             }
         }
 
@@ -730,3 +718,4 @@ async function connectToWhatsApp() {
 }
 
 connectToWhatsApp();
+
