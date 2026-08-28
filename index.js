@@ -29,7 +29,7 @@ async function startBot() {
         console.log(`Kode Pairing WhatsApp Anda: ${code}`);
     }
 
-    sock.connection.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
