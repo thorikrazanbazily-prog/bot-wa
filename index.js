@@ -3,7 +3,7 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
 import FormData from 'form-data';
-import Jimp from 'jimp'; // <-- Menggunakan Jimp, pastikan sudah di-install (npm install jimp)
+import Jimp from 'jimp';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFile, unlink } from 'fs/promises';
