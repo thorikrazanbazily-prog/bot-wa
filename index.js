@@ -142,18 +142,25 @@ const saveWelcomeSettings = (settings) => {
 
 async function uploadToCatbox(buffer, filename = 'file.jpg') {
     try {
+        const FormData = (await import('form-data')).default;
         const formData = new FormData();
         formData.append('reqtype', 'fileupload');
-        formData.append('fileToUpload', buffer, { filename: filename });
+        formData.append('fileToUpload', buffer, {
+            filename: filename,
+            contentType: 'image/jpeg'
+        });
         
         const res = await fetch('https://catbox.moe/user/api.php', {
             method: 'POST',
             body: formData,
-            headers: formData.getHeaders()
+            headers: {
+                ...formData.getHeaders()
+            }
         });
+        
         const resultUrl = await res.text();
         return resultUrl.trim();
-    } catch (err) {
+    } graph (err) { // Perhatikan bagian catch di bawah jika di file asli menggunakan catch
         console.error('Gagal upload ke Catbox:', err);
         return null;
     }
