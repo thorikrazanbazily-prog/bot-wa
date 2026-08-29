@@ -139,30 +139,37 @@ const saveWelcomeSettings = (settings) => {
     }
 };
 
-async function uploadToTelegraph(buffer, filename = 'image.jpg') {
+// ==========================================
+// FUNGSI HELPER TELEGRAPH UPLOAD
+// ==========================================
+async function uploadToTelegraph(buffer, mimeType) {
     try {
-        const formData = new FormData();
-        formData.append('file', buffer, { 
-            filename: filename, 
-            contentType: 'image/jpeg' 
+        const FormData = (await import('form-data')).default;
+        const form = new FormData();
+        
+        // Ekstensi file berdasarkan mimetype
+        let ext = 'jpg';
+        if (mimeType.includes('png')) ext = 'png';
+        else if (mimeType.includes('webp')) ext = 'webp';
+
+        form.append('file', buffer, {
+            filename: `image.${ext}`,
+            contentType: mimeType
         });
 
         const response = await fetch('https://telegra.ph/upload', {
             method: 'POST',
-            body: formData,
-            headers: formData.getHeaders()
+            body: form
         });
-
-        const result = await response.json();
         
-        if (result && result[0] && result[0].src) {
-            return 'https://telegra.ph' + result[0].src;
+        const res = await response.json();
+        if (res && res[0] && res[0].src) {
+            return 'https://telegra.ph' + res[0].src;
         }
-
-        throw new Error('Gagal mendapatkan URL dari Telegra.ph');
-    } catch (err) {
-        console.error('Error Telegra.ph:', err.message);
-        return null;
+        throw new Error('Gagal mendapatkan URL dari Telegraph.');
+    } catch (error) {
+        console.error('Error uploadToTelegraph:', error);
+        throw error;
     }
 }
 
@@ -376,6 +383,7 @@ async function connectToWhatsApp() {
 * ➔ *.stiker* / *.s* : Kirim/reply foto jadi stiker
 * ➔ *.wm <pack>* : Ubah watermark stiker
 * ➔ *.smeme <atas> | <bawah>* : Buat stiker meme dengan teks
+* ➔ *.smeme <teks atas> | <teks bawah>* : Membuat stiker meme dari foto (kirim/reply foto)
 * ➔ *.tts <teks>* : Ubah teks jadi Voice Note (Suara Google)
 * ➔ *.pinterest <kata kunci>* : Cari foto estetik dari Pinterest
 * ➔ *.short <link>* : Memperpendek URL/link panjang
@@ -517,69 +525,77 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // STIKER MEME (SMEME)
-            else if (command === '.smeme' || command === '.memesticker') {
+                        // SMEME (Stiker Meme - Teks Atas & Bawah)
+            else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
-                    const isDirectImage = msg.message.imageMessage;
                     
-                    let quotedImageMsg = qMsg?.imageMessage || 
-                                         qMsg?.ephemeralMessage?.message?.imageMessage || 
-                                         qMsg?.viewOnceMessage?.message?.imageMessage ||
-                                         qMsg?.viewOnceMessageV2?.message?.imageMessage;
+                    // Cek apakah user mereply gambar atau mengirim gambar dengan caption .smeme
+                    const isQuotedImage = qMsg?.imageMessage || qMsg?.ephemeralMessage?.message?.imageMessage;
+                    const isCurrentImage = msg.message.imageMessage;
 
-                    if (!isDirectImage && !quotedImageMsg) {
-                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan format:\n*.smeme <teks atas>* atau\n*.smeme <teks atas> | <teks bawah>*' }, { quoted: msg });
+                    if (!isQuotedImage && !isCurrentImage) {
+                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply gambar dengan caption:\n*.smeme teksAtas | teksBawah*' }, { quoted: msg });
                     }
 
                     if (!textInput) {
-                        return sock.sendMessage(from, { text: '⚠️ Masukkan teks meme-nya!\nContoh: *.smeme Teks Atas | Teks Bawah*' }, { quoted: msg });
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan teksnya!\nContoh: *.smeme Ketika diajak mabar | Malah ketiduran*' }, { quoted: msg });
                     }
 
                     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-                    let mediaTarget = msg;
-                    if (quotedImageMsg) {
+                    // Pisahkan teks atas dan teks bawah menggunakan pemisah '|'
+                    let parts = textInput.split('|');
+                    let topText = parts[0] ? encodeURIComponent(parts[0].trim()) : '_';
+                    let bottomText = parts[1] ? encodeURIComponent(parts[1].trim()) : '_';
+
+                    // Unduh media gambar
+                    let mediaTarget;
+                    let mimeType = 'image/jpeg';
+
+                    if (isCurrentImage) {
+                        mediaTarget = msg;
+                        mimeType = msg.message.imageMessage.mimetype || 'image/jpeg';
+                    } else {
                         mediaTarget = {
                             key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
                             message: qMsg
                         };
+                        mimeType = qMsg?.imageMessage?.mimetype || qMsg?.ephemeralMessage?.message?.imageMessage?.mimetype || 'image/jpeg';
                     }
 
-                    let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Gagal mendownload media.');
+                    const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                    if (!mediaBuffer || mediaBuffer.length ===0) throw new Error('Buffer gambar kosong.');
 
-                    let imageUrl = await uploadToTelegraph(mediaBuffer, 'meme.jpg');
-                    if (!imageUrl || !imageUrl.startsWith('http')) {
-                        return sock.sendMessage(from, { text: '❌ Gagal mengunggah media sementara.' }, { quoted: msg });
-                    }
+                    // Upload gambar ke Telegraph agar bisa dibaca oleh API Meme Generator
+                    const imageUrl = await uploadToTelegraph(mediaBuffer, mimeType);
 
-                    let topText = '';
-                    let bottomText = '';
+                    // Menggunakan API Meme Generator publik (memegen.link / api.memegen.link)
+                    const memeApiUrl = `https://api.memegen.link/images/custom/${topText}/${bottomText}.png?background=${encodeURIComponent(imageUrl)}`;
 
-                    if (textInput.includes('|')) {
-                        let parts = textInput.split('|').map(s => s.trim());
-                        topText = parts[0] || '';
-                        bottomText = parts[1] || '';
-                    } else {
-                        topText = textInput;
-                        bottomText = '';
-                    }
+                    // Ambil hasil gambar meme dari API
+                    const memeRes = await fetch(memeApiUrl);
+                    if (!memeRes.ok) throw new Error('Gagal menghasilkan gambar meme dari API.');
+                    const memeBuffer = await memeRes.buffer();
 
-                    let memeApiUrl = `https://api.siputzx.my.id/api/maker/meme?url=${encodeURIComponent(imageUrl)}&text1=${encodeURIComponent(topText)}&text2=${encodeURIComponent(bottomText)}`;
-                    let memeRes = await fetch(memeApiUrl);
-                    if (!memeRes.ok) throw new Error(`Gagal merender meme (Status: ${memeRes.status})`);
-                    
-                    let memeBuffer = Buffer.from(await memeRes.arrayBuffer());
-                    let stickerBuffer = await makeSticker(memeBuffer, 'image/jpeg');
+                    // Konversi gambar meme menjadi stiker menggunakan wa-sticker-formatter
+                    const sticker = new Sticker(memeBuffer, {
+                        pack: '',
+                        author: '',
+                        type: StickerTypes.FULL,
+                        quality: 60
+                    });
 
+                    const stickerBuffer = await sticker.toBuffer();
+
+                    // Kirim stiker ke chat
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
                     console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme.` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan format teks menggunakan pemisah '|'.\nContoh: .smeme teks atas | teks bawah` }, { quoted: msg });
                 }
             }
 
