@@ -533,7 +533,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-                         // SMEME (Stiker Meme Lokal dengan Jimp)
+                                     // SMEME (Stiker Meme Alternatif via API Stabil)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -554,8 +554,8 @@ async function connectToWhatsApp() {
 
                     // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
-                    let topText = parts[0] ? parts[0].trim().toUpperCase() : '';
-                    let bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
+                    let topText = parts[0] ? parts[0].trim() : '';
+                    let bottomText = parts[1] ? parts[1].trim() : '';
 
                     // Unduh media gambar dari pesan
                     let mediaTarget;
@@ -575,45 +575,37 @@ async function connectToWhatsApp() {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Proses gambar menggunakan Jimp secara lokal
-                    const image = await Jimp.read(mediaBuffer);
+                    // Upload sementara ke teleg.ph untuk mendapatkan URL publik gambar (Metode paling aman & kompatibel untuk generator meme)
+                    const formData = new FormData();
+                    formData.append('file', mediaBuffer, {
+                        filename: 'meme_image.jpg',
+                        contentType: mimeType
+                    });
+
+                    const uploadRes = await fetch('https://teleg.ph/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const uploadJson = await uploadRes.json();
+
+                    if (!uploadJson || !uploadJson[0] || !uploadJson[0].src) {
+                        throw new Error('Gagal mengunggah media sementara.');
+                    }
+
+                    const imageUrl = 'https://teleg.ph' + uploadJson[0].src;
+
+                    // Menggunakan API Generator Meme publik yang stabil berbasis URL gambar
+                    const memeApiUrl = `https://api.memegen.link/images/custom/_/_?background=${encodeURIComponent(imageUrl)}`;
                     
-                    // Ubah ukuran gambar agar proporsional untuk stiker (maksimal 512px)
-                    image.scaleToFit({ w: 512, h: 512 });
+                    // Format penambahan teks atas dan bawah
+                    let finalMemeUrl = `https://api.memegen.link/images/custom/${encodeURIComponent(topText || '_')}/${encodeURIComponent(bottomText || '_')}.png?background=${imageUrl}`;
 
-                    // Muat font bawaan Jimp (Font putih tebal dengan outline hitam standar meme)
-                    // Jika font bawaan tidak ditemukan, Jimp akan menggunakan teks standar
-                    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
+                    const memeRes = await fetch(finalMemeUrl);
+                    if (!memeRes.ok) throw new Error('Gagal merender gambar meme.');
+                    const memeBuffer = await memeRes.buffer();
 
-                    // Cetak teks atas jika ada
-                    if (topText) {
-                        image.print({
-                            font: font,
-                            x: 10,
-                            y: 10,
-                            text: topText,
-                            maxWidth: image.bitmap.width - 20,
-                            maxHeight: 100
-                        }, (err) => { /* handle alignment jika perlu */ });
-                    }
-
-                    // Cetak teks bawah jika ada
-                    if (bottomText) {
-                        image.print({
-                            font: font,
-                            x: 10,
-                            y: image.bitmap.height - 80,
-                            text: bottomText,
-                            maxWidth: image.bitmap.width - 20,
-                            maxHeight: 100
-                        }, (err) => { /* handle alignment jika perlu */ });
-                    }
-
-                    // Ubah hasil edit ke buffer PNG
-                    const processedBuffer = await image.getBuffer('image/png');
-
-                    // Buat stiker menggunakan wa-sticker-formatter
-                    const sticker = new Sticker(processedBuffer, {
+                    // Buat stiker
+                    const sticker = new Sticker(memeBuffer, {
                         pack: '',
                         author: '',
                         type: StickerTypes.FULL,
@@ -626,8 +618,8 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
-                    console.error('Error Smeme Lokal:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme secara lokal. Pastikan format gambar benar!` }, { quoted: msg });
+                    console.error('Error Smeme:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan menggunakan tanda '|' dengan benar.\nContoh: .smeme atas | bawah` }, { quoted: msg });
                 }
             }
 
