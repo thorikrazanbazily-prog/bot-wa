@@ -1,5 +1,4 @@
-import pkg from '@whiskeysockets/baileys';
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } = pkg;
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
