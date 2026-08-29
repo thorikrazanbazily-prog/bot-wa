@@ -140,53 +140,6 @@ const saveWelcomeSettings = (settings) => {
 };
 
 // ==========================================
-// FUNGSI HELPER TELEGRAPH UPLOAD (REVISED)
-// ==========================================
-async function uploadToTelegraph(buffer, mimeType) {
-    try {
-        const FormData = (await import('form-data')).default;
-        const form = new FormData();
-        
-        let ext = 'jpg';
-        if (mimeType.includes('png')) ext = 'png';
-        else if (mimeType.includes('webp')) ext = 'webp';
-
-        form.append('file', buffer, {
-            filename: `image.${ext}`,
-            contentType: mimeType
-        });
-
-        // Menggunakan fetch dengan headers peniru browser agar lolos dari proteksi Cloudflare Telegra.ph
-        const response = await fetch('https://telegra.ph/upload', {
-            method: 'POST',
-            body: form,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-
-        const textRes = await response.text();
-        let res;
-        try {
-            res = JSON.parse(textRes);
-        } catch (e) {
-            throw new Error(`Respon server bukan JSON: ${textRes.substring(0, 100)}`);
-        }
-
-        if (res && res[0] && res[0].src) {
-            return 'https://telegra.ph' + res[0].src;
-        } else if (res && res.error) {
-            throw new Error(`Telegraph Error: ${res.error}`);
-        }
-        
-        throw new Error('Gagal mendapatkan URL dari Telegraph.');
-    } catch (error) {
-        console.error('Error uploadToTelegraph:', error);
-        throw error;
-    }
-}
-
-// ==========================================
 // KONEKSI UTAMA BOT
 // ==========================================
 async function connectToWhatsApp() {
@@ -396,7 +349,6 @@ async function connectToWhatsApp() {
 * ➔ *.stiker* / *.s* : Kirim/reply foto jadi stiker
 * ➔ *.wm <pack>* : Ubah watermark stiker
 * ➔ *.smeme <atas> | <bawah>* : Buat stiker meme dengan teks
-* ➔ *.smeme <teks atas> | <teks bawah>* : Membuat stiker meme dari foto (kirim/reply foto)
 * ➔ *.tts <teks>* : Ubah teks jadi Voice Note (Suara Google)
 * ➔ *.pinterest <kata kunci>* : Cari foto estetik dari Pinterest
 * ➔ *.short <link>* : Memperpendek URL/link panjang
@@ -538,13 +490,54 @@ async function connectToWhatsApp() {
                 }
             }
 
-                        // SMEME (Stiker Meme - Teks Atas & Bawah)
+            // STIKER / S (MEMBUAT STIKER DARI FOTO/VIDEO)
+            else if (command === '.stiker' || command === '.s') {
+                try {
+                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                    const qMsg = contextInfo?.quotedMessage;
+                    
+                    const isQuotedImageOrVideo = qMsg?.imageMessage || qMsg?.videoMessage || qMsg?.ephemeralMessage?.message?.imageMessage || qMsg?.ephemeralMessage?.message?.videoMessage;
+                    const isCurrentImageOrVideo = msg.message.imageMessage || msg.message.videoMessage;
+
+                    if (!isQuotedImageOrVideo && !isCurrentImageOrVideo) {
+                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply gambar/video dengan caption *.stiker* atau *.s*' }, { quoted: msg });
+                    }
+
+                    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
+
+                    let mediaTarget;
+                    let mimeType = 'image/jpeg';
+
+                    if (isCurrentImageOrVideo) {
+                        mediaTarget = msg;
+                        mimeType = msg.message.imageMessage?.mimetype || msg.message.videoMessage?.mimetype || 'image/jpeg';
+                    } else {
+                        mediaTarget = {
+                            key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
+                            message: qMsg
+                        };
+                        mimeType = qMsg?.imageMessage?.mimetype || qMsg?.videoMessage?.mimetype || qMsg?.ephemeralMessage?.message?.imageMessage?.mimetype || 'image/jpeg';
+                    }
+
+                    const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer media kosong.');
+
+                    const stickerBuffer = await makeSticker(mediaBuffer, mimeType);
+
+                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+                } catch (err) {
+                    console.error('Error Stiker:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker. Pastikan file berupa gambar atau video pendek!` }, { quoted: msg });
+                }
+            }
+
+             // SMEME (Stiker Meme - Teks Atas & Bawah)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
                     
-                    // Cek apakah user mereply gambar atau mengirim gambar dengan caption .smeme
                     const isQuotedImage = qMsg?.imageMessage || qMsg?.ephemeralMessage?.message?.imageMessage;
                     const isCurrentImage = msg.message.imageMessage;
 
@@ -558,12 +551,12 @@ async function connectToWhatsApp() {
 
                     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-                    // Pisahkan teks atas dan teks bawah menggunakan pemisah '|'
+                    // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
-                    let topText = parts[0] ? encodeURIComponent(parts[0].trim()) : '_';
-                    let bottomText = parts[1] ? encodeURIComponent(parts[1].trim()) : '_';
+                    let topText = parts[0] ? parts[0].trim() : '_';
+                    let bottomText = parts[1] ? parts[1].trim() : '_';
 
-                    // Unduh media gambar
+                    // Unduh media gambar dari pesan
                     let mediaTarget;
                     let mimeType = 'image/jpeg';
 
@@ -579,20 +572,40 @@ async function connectToWhatsApp() {
                     }
 
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-                    if (!mediaBuffer || mediaBuffer.length ===0) throw new Error('Buffer gambar kosong.');
+                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Upload gambar ke Telegraph agar bisa dibaca oleh API Meme Generator
-                    const imageUrl = await uploadToTelegraph(mediaBuffer, mimeType);
+                    // Ubah buffer gambar ke Base64 Data URL
+                    let ext = 'jpg';
+                    if (mimeType.includes('png')) ext = 'png';
+                    else if (mimeType.includes('webp')) ext = 'webp';
+                    
+                    const base64Image = `data:${mimeType};base64,${mediaBuffer.toString('base64')}`;
 
-                    // Menggunakan API Meme Generator publik (memegen.link / api.memegen.link)
-                    const memeApiUrl = `https://api.memegen.link/images/custom/${topText}/${bottomText}.png?background=${encodeURIComponent(imageUrl)}`;
+                    // Kirim request POST langsung ke API Memegen (Tanpa Telegraph)
+                    const response = await fetch('https://api.memegen.link/images/custom', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            background: base64Image,
+                            lines: [topText, bottomText],
+                            extension: 'png'
+                        })
+                    });
 
-                    // Ambil hasil gambar meme dari API
-                    const memeRes = await fetch(memeApiUrl);
-                    if (!memeRes.ok) throw new Error('Gagal menghasilkan gambar meme dari API.');
+                    const resJson = await response.json();
+                    
+                    if (!response.ok || !resJson.url) {
+                        throw new Error(resJson.message || 'Gagal memproses gambar dari meme generator.');
+                    }
+
+                    // Ambil hasil gambar meme jadi
+                    const memeRes = await fetch(resJson.url);
                     const memeBuffer = await memeRes.buffer();
 
-                    // Konversi gambar meme menjadi stiker menggunakan wa-sticker-formatter
+                    // Buat stiker
                     const sticker = new Sticker(memeBuffer, {
                         pack: '',
                         author: '',
@@ -602,13 +615,12 @@ async function connectToWhatsApp() {
 
                     const stickerBuffer = await sticker.toBuffer();
 
-                    // Kirim stiker ke chat
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
                     console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan format teks menggunakan pemisah '|'.\nContoh: .smeme teks atas | teks bawah` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan ukuran gambar tidak terlalu besar dan gunakan pemisah '|'.\nContoh: .smeme teks atas | teks bawah` }, { quoted: msg });
                 }
             }
 
