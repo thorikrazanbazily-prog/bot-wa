@@ -806,8 +806,8 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
-                    console.error('Error Sticker Detail:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal membuat stiker.' }, { quoted: msg });
+                    console.error('Error Sticker Detail Lengkap:', err);
+                await sock.sendMessage(from, { text: `❌ Gagal membuat stiker. Error: ${err.message}` }, { quoted: msg });
                 }
             }
 
