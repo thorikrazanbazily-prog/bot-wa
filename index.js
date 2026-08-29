@@ -62,11 +62,11 @@ const WELCOME_SETTINGS_FILE = 'welcome_settings.json';
 // Helper presisi mengekstrak digit angka saja
 const extractNumber = (jid) => {
     if (!jid || typeof jid !== 'string') return '';
-    // Hapus device specifier (:3 dll), domain (@s.whatsapp.net, @g.us), dan ambil angkanya saja
     const clean = jid.split('@')[0].split(':')[0];
     return clean.replace(/[^0-9]/g, '');
 };
-// HELPER CACHE METADATA GRUP (Menghindari Fetch Berulang ke Server WA)
+
+// HELPER CACHE METADATA GRUP
 async function getGroupMetadataCached(sock, groupId) {
     const now = Date.now();
     if (groupMembersCache[groupId] && (now - groupMembersCache[groupId].lastFetch < 300000)) {
@@ -105,7 +105,6 @@ const saveSettings = (isPublic) => {
     }
 };
 
-// Fungsi membaca database grup yang diizinkan
 const loadAllowedGroups = () => {
     try {
         if (fs.existsSync(ALLOWED_GROUPS_FILE)) {
@@ -127,7 +126,6 @@ const saveAllowedGroups = (groups) => {
 
 let isPublicMode = loadSettings();
 
-// Fungsi Database RPG
 const loadRpgDb = () => {
     try {
         if (fs.existsSync(DB_RPG_FILE)) {
@@ -147,7 +145,6 @@ const saveRpgDb = (db) => {
     }
 };
 
-// Fungsi Database Welcome
 const loadWelcomeSettings = () => {
     try {
         if (fs.existsSync(WELCOME_SETTINGS_FILE)) {
@@ -167,7 +164,6 @@ const saveWelcomeSettings = (settings) => {
     }
 };
 
-// Fungsi helper upload ke Catbox untuk mendapatkan URL gambar publik
 async function uploadToCatbox(buffer, filename = 'file.jpg') {
     try {
         const formData = new FormData();
@@ -216,7 +212,9 @@ async function connectToWhatsApp() {
             qrcode.generate(qr, { small: true });
         }
 
-        if (connection === 'close') {
+        if (connection === 'connecting') {
+            console.log('🔄 Menghubungkan ke server WhatsApp...');
+        } else if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
             console.log(`⚠️ Koneksi terputus (Status: ${statusCode}). Mencoba menghubungkan kembali...`);
@@ -272,39 +270,45 @@ async function connectToWhatsApp() {
     // ==========================================
     sock.ev.on('messages.upsert', async (m) => {
         try {
-            if (m.type !== 'notify') return;
-
+            if (!m.messages || m.messages.length === 0) return;
             const msg = m.messages[0];
-            if (!msg || !msg.message || msg.key.remoteJid === 'status@broadcast') return;
+            
+            if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
+            // Tandai pesan sudah dibaca (Opsional, abaikan jika bikin error)
             await sock.readMessages([msg.key]).catch(() => {});
 
             const from = msg.key.remoteJid;
             const isGroup = from.endsWith('@g.us');
             const senderJid = isGroup ? (msg.key.participant || from) : from;
-const senderNumber = extractNumber(senderJid);
+            const senderNumber = extractNumber(senderJid);
+
+            // Perbaikan ekstraksi isi pesan agar aman dari berbagai variasi wrapper Baileys
+            const messageContent = msg.message.ephemeralMessage?.message || 
+                                   msg.message.viewOnceMessage?.message || 
+                                   msg.message.viewOnceMessageV2?.message || 
+                                   msg.message;
+
             let body = '';
-            const type = Object.keys(msg.message)[0];
+            const type = Object.keys(messageContent)[0];
 
             if (type === 'conversation') {
-                body = msg.message.conversation;
+                body = messageContent.conversation;
             } else if (type === 'extendedTextMessage') {
-                body = msg.message.extendedTextMessage.text;
+                body = messageContent.extendedTextMessage.text;
             } else if (type === 'imageMessage') {
-                body = msg.message.imageMessage.caption;
+                body = messageContent.imageMessage.caption;
             } else if (type === 'videoMessage') {
-                body = msg.message.videoMessage.caption;
+                body = messageContent.videoMessage.caption;
             }
 
             const text = body || '';
-            if (!text && !msg.message.imageMessage && !msg.message.stickerMessage && !msg.message.viewOnceMessage) return;
-
             const args = text.trim().split(/ +/);
             const command = args.length > 0 ? args.shift().toLowerCase() : '';
             const textInput = args.join(' ');
 
             const isOwner = msg.key.fromMe || OWNER_NUMBERS.includes(senderNumber);
-const isVIP = VIP_NUMBERS.includes(senderNumber);
+            const isVIP = VIP_NUMBERS.includes(senderNumber);
             
             // ==========================================
             // FITUR PENGATURAN MODE PUBLIC / PRIVATE
@@ -520,7 +524,7 @@ const isVIP = VIP_NUMBERS.includes(senderNumber);
                         await sock.sendMessage(from, { image: { url: imageUrl }, caption: `📌 *PINTEREST SEARCH*\n🔍 *Query:* ${textInput}` }, { quoted: msg });
                         await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
                     } else {
-                        throw new Error('Gambar Pinterest tidak ditemukan dari semua API.');
+                        throw new Error('Gambar Pinterest tidak ditemukan.');
                     }
                 } catch (err) {
                     console.error('Error Pinterest:', err);
@@ -590,7 +594,7 @@ const isVIP = VIP_NUMBERS.includes(senderNumber);
 
                 } catch (err) {
                     console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme. (Detail: ${err.message})` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme.` }, { quoted: msg });
                 }
             }
 
@@ -645,7 +649,7 @@ const isVIP = VIP_NUMBERS.includes(senderNumber);
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
                 } catch (err) {
                     console.error('Error Relay Message CTA Copy:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal mengirim pesan interaktif. (Detail: ${err.message})` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal mengirim pesan interaktif.` }, { quoted: msg });
                 }
             }
 
@@ -777,7 +781,7 @@ const isVIP = VIP_NUMBERS.includes(senderNumber);
                 }
             }
 
-            // STIKER (Menggunakan makeSticker FFMPEG)
+            // STIKER
             else if (command === '.sticker' || command === '.stiker' || command === '.s') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
