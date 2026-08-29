@@ -533,7 +533,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-                                     // SMEME (Stiker Meme Alternatif via API Stabil)
+                                                 // SMEME (Stiker Meme Langsung Tanpa Upload Teleg.ph)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -554,8 +554,8 @@ async function connectToWhatsApp() {
 
                     // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
-                    let topText = parts[0] ? parts[0].trim() : '';
-                    let bottomText = parts[1] ? parts[1].trim() : '';
+                    let topText = parts[0] ? parts[0].trim() : '_';
+                    let bottomText = parts[1] ? parts[1].trim() : '_';
 
                     // Unduh media gambar dari pesan
                     let mediaTarget;
@@ -575,33 +575,31 @@ async function connectToWhatsApp() {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Upload sementara ke teleg.ph untuk mendapatkan URL publik gambar (Metode paling aman & kompatibel untuk generator meme)
-                    const formData = new FormData();
-                    formData.append('file', mediaBuffer, {
-                        filename: 'meme_image.jpg',
-                        contentType: mimeType
-                    });
+                    // Ubah buffer ke format base64 data uri
+                    const base64Image = `data:${mimeType};base64,${mediaBuffer.toString('base64')}`;
 
-                    const uploadRes = await fetch('https://teleg.ph/upload', {
+                    // Kirim ke API memegen menggunakan JSON payload POST langsung (Tidak butuh teleg.ph & aman dari error SSL Termux)
+                    const response = await fetch('https://api.memegen.link/images/custom', {
                         method: 'POST',
-                        body: formData
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            background: base64Image,
+                            lines: [topText, bottomText],
+                            extension: 'png'
+                        })
                     });
-                    const uploadJson = await uploadRes.json();
 
-                    if (!uploadJson || !uploadJson[0] || !uploadJson[0].src) {
-                        throw new Error('Gagal mengunggah media sementara.');
+                    const resJson = await response.json();
+                    
+                    if (!response.ok || !resJson.url) {
+                        throw new Error(resJson.message || 'Gagal memproses gambar meme.');
                     }
 
-                    const imageUrl = 'https://teleg.ph' + uploadJson[0].src;
-
-                    // Menggunakan API Generator Meme publik yang stabil berbasis URL gambar
-                    const memeApiUrl = `https://api.memegen.link/images/custom/_/_?background=${encodeURIComponent(imageUrl)}`;
-                    
-                    // Format penambahan teks atas dan bawah
-                    let finalMemeUrl = `https://api.memegen.link/images/custom/${encodeURIComponent(topText || '_')}/${encodeURIComponent(bottomText || '_')}.png?background=${imageUrl}`;
-
-                    const memeRes = await fetch(finalMemeUrl);
-                    if (!memeRes.ok) throw new Error('Gagal merender gambar meme.');
+                    // Ambil hasil gambar meme dari URL internal API
+                    const memeRes = await fetch(resJson.url);
                     const memeBuffer = await memeRes.buffer();
 
                     // Buat stiker
@@ -619,7 +617,7 @@ async function connectToWhatsApp() {
 
                 } catch (err) {
                     console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan menggunakan tanda '|' dengan benar.\nContoh: .smeme atas | bawah` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan ukuran gambar tidak terlalu besar!` }, { quoted: msg });
                 }
             }
 
