@@ -4,7 +4,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
-import { default: fetch } from 'node-fetch';
+import fetch from 'node-fetch';
 import FormData from 'form-data';
 import ffmpeg from 'fluent-ffmpeg';
 import { tmpdir } from 'os';
