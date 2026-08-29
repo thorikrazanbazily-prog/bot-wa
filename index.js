@@ -3,7 +3,7 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
 import FormData from 'form-data';
-import { Jimp } from 'jimp';
+import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFile, unlink } from 'fs/promises';
@@ -43,7 +43,7 @@ const saveBotControl = (control) => {
 };
 
 // ==========================================
-// FUNGSI HELPER PEMBUAT STIKER (SAFE JIMP)
+// FUNGSI HELPER PEMBUAT STIKER (WA-STICKER-FORMATTER)
 // ==========================================
 async function makeSticker(mediaBuffer, mimeType) {
     try {
@@ -57,17 +57,17 @@ async function makeSticker(mediaBuffer, mimeType) {
             }
         }
 
-        // Membaca buffer gambar dengan Jimp
-        const image = await Jimp.read(bufferObj);
-        
-        // Mengatur ukuran standar stiker WhatsApp (512x512) dengan tetap menjaga rasio
-        image.scaleToFit(512, 512);
-        
-        // Konversi ke format PNG buffer (lebih stabil dan kompatibel di semua versi Jimp)
-        let webpBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
+        const sticker = new Sticker(bufferObj, {
+            pack: 'Bot Riq Imup',      // Nama Pack Stiker
+            author: 'Thoriq',          // Nama Pembuat / Author
+            type: StickerTypes.FULL,   // Jenis stiker (FULL / CROP)
+            quality: 60                // Kualitas kompresi stiker (1-100)
+        });
+
+        const webpBuffer = await sticker.toBuffer();
         return webpBuffer;
     } catch (error) {
-        console.error('Gagal membuat stiker dengan Jimp:', error);
+        console.error('Gagal membuat stiker dengan wa-sticker-formatter:', error);
         throw new Error('Format gambar tidak didukung atau rusak.');
     }
 }
@@ -802,7 +802,7 @@ async function connectToWhatsApp() {
 
                 } catch (err) {
                     console.error('Error Sticker Detail Lengkap:', err);
-                await sock.sendMessage(from, { text: `❌ Gagal membuat stiker. Error: ${err.message}` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker. Error: ${err.message}` }, { quoted: msg });
                 }
             }
 
