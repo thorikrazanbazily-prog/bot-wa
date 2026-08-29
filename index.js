@@ -806,32 +806,48 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // WATERMARK STIKER
-            else if (command === '.wm' || command === '.watermark') {
-                try {
-                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
-                    const qMsg = contextInfo?.quotedMessage;
-                    let quotedStickerMsg = qMsg?.stickerMessage || qMsg?.ephemeralMessage?.message?.stickerMessage;
+            // WATERMARK STIKER 
+else if (command === '.wm' || command === '.watermark') {
+    try {
+        const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+        const qMsg = contextInfo?.quotedMessage;
+        let quotedStickerMsg = qMsg?.stickerMessage || qMsg?.ephemeralMessage?.message?.stickerMessage;
 
-                    if (!quotedStickerMsg) {
-                        return sock.sendMessage(from, { text: '⚠️ Reply stiker yang ingin diambil/dibuat ulang!' }, { quoted: msg });
-                    }
+        if (!quotedStickerMsg) {
+            return sock.sendMessage(from, { text: '⚠️ Reply stiker yang ingin diganti watermarknya!\nContoh: *.wm NamaPackBaru*' }, { quoted: msg });
+        }
 
-                    const mediaTarget = {
-                        key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
-                        message: qMsg
-                    };
+        const mediaTarget = {
+            key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
+            message: qMsg
+        };
 
-                    const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer stiker kosong.');
+        const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+        if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer stiker kosong.');
 
-                    await sock.sendMessage(from, { sticker: mediaBuffer }, { quoted: msg });
-                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-                } catch (err) {
-                    console.error('Error Watermark Detail:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal memproses stiker.' }, { quoted: msg });
-                }
-            }
+        // Mengambil teks input sepenuhnya hanya untuk Pack Name
+        // Author dikosongkan (string kosong '')
+        const packName = textInput ? textInput.trim() : '';
+        const authorName = ''; 
+
+        // Buat ulang stiker dengan pack baru dan author kosong
+        const sticker = new Sticker(mediaBuffer, {
+            pack: packName,
+            author: authorName,
+            type: StickerTypes.FULL,
+            quality: 60
+        });
+
+        const newStickerBuffer = await sticker.toBuffer();
+
+        await sock.sendMessage(from, { sticker: newStickerBuffer }, { quoted: msg });
+        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+    } catch (err) {
+        console.error('Error Watermark Detail:', err);
+        await sock.sendMessage(from, { text: `❌ Gagal memproses watermark stiker. Error: ${err.message}` }, { quoted: msg });
+    }
+}
+
 
             // READ VIEW ONCE
             else if (command === '.rvo' || command === '.readviewonce') {
