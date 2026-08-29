@@ -46,47 +46,20 @@ const saveBotControl = (control) => {
 // FUNGSI HELPER PEMBUAT STIKER (FFMPEG)
 // ==========================================
 async function makeSticker(mediaBuffer, mimeType) {
-    let ext = mimeType && mimeType.includes('video') ? 'mp4' : 'jpg';
-    let tmpFileIn = join(tmpdir(), `${Date.now()}.${ext}`);
-    let tmpFileOut = join(tmpdir(), `${Date.now()}.webp`);
-    
-    await writeFile(tmpFileIn, mediaBuffer);
-    
-    await new Promise((resolve, reject) => {
-        let command = ffmpeg(tmpFileIn)
-            .on('error', (err) => {
-                console.error('FFmpeg Error Detail:', err);
-                reject(err);
-            })
-            .on('end', () => resolve(true));
-
-        if (ext === 'mp4') {
-            command.outputOptions([
-                "-vcodec", "libwebp",
-                "-vf", "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000",
-                "-loop", "0",
-                "-ss", "00:00:00",
-                "-t", "00:00:05",
-                "-preset", "default",
-                "-an",
-                "-vsync", "0"
-            ]).toFormat('webp');
-        } else {
-            command.outputOptions([
-                "-vcodec", "libwebp",
-                "-vf", "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000",
-                "-q:v", "75",
-                "-lossless", "0"
-            ]).toFormat('webp');
-        }
-
-        command.save(tmpFileOut);
-    });
-
-    let stickerBuffer = await fs.promises.readFile(tmpFileOut);
-    await unlink(tmpFileIn);
-    await unlink(tmpFileOut);
-    return stickerBuffer;
+    try {
+        // Membaca buffer gambar dengan Jimp
+        const image = await Jimp.read(mediaBuffer);
+        
+        // Mengatur ukuran standar stiker WhatsApp (512x512) dengan tetap menjaga rasio
+        image.scaleToFit(512, 512);
+        
+        // Konversi langsung ke format WebP
+        let webpBuffer = await image.getBufferAsync(Jimp.MIME_WEBP);
+        return webpBuffer;
+    } catch (error) {
+        console.error('Gagal membuat stiker dengan Jimp:', error);
+        throw new Error('Format gambar tidak didukung atau rusak.');
+    }
 }
 
 // ==========================================
