@@ -529,7 +529,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
+                        // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -539,18 +539,26 @@ async function connectToWhatsApp() {
                     const isCurrentImage = msg.message.imageMessage;
 
                     if (!isQuotedImage && !isCurrentImage) {
-                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply gambar dengan caption:\n*.smeme teksAtas | teksBawah*' }, { quoted: msg });
+                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply gambar dengan caption:\n*.smeme teksAtas | teksBawah* atau *.smeme teks*' }, { quoted: msg });
                     }
 
                     if (!textInput) {
-                        return sock.sendMessage(from, { text: '⚠️ Masukkan teksnya!\nContoh: *.smeme Ketika diajak mabar | Malah ketiduran*' }, { quoted: msg });
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan teksnya!\nContoh: *.smeme My Bini*' }, { quoted: msg });
                     }
 
                     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-                    let parts = textInput.split('|');
-                    let topText = parts[0] ? parts[0].trim().toUpperCase() : '';
-                    let bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
+                    let topText = '';
+                    let bottomText = '';
+
+                    if (textInput.includes('|')) {
+                        let parts = textInput.split('|');
+                        topText = parts[0] ? parts[0].trim().toUpperCase() : '';
+                        bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
+                    } else {
+                        // Jika tidak pakai |, teks otomatis jadi teks atas (atau bawah terserah Anda)
+                        topText = textInput.trim().toUpperCase();
+                    }
 
                     let mediaTarget;
                     if (isCurrentImage) {
@@ -565,35 +573,34 @@ async function connectToWhatsApp() {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Load gambar menggunakan @napi-rs/canvas
                     const image = await loadImage(mediaBuffer);
                     const canvas = createCanvas(image.width, image.height);
                     const ctx = canvas.getContext('2d');
 
                     ctx.drawImage(image, 0, 0, image.width, image.height);
 
-                    // Konfigurasi Style Teks Meme (Impact font style)
-                    const fontSize = Math.floor(image.width / 10);
-                    ctx.font = `bold ${fontSize}pt Impact, sans-serif`;
+                    // Ukuran font proporsional berdasarkan lebar gambar
+                    const fontSize = Math.max(20, Math.floor(image.width / 12));
+                    ctx.font = `bold ${fontSize}pt sans-serif`;
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
-                    ctx.lineWidth = Math.max(3, Math.floor(fontSize / 10));
+                    ctx.lineWidth = Math.max(2, Math.floor(fontSize / 8));
                     ctx.textAlign = 'center';
 
-                    // Fungsi pembantu render teks dengan outline hitam
-                    function drawMemeText(text, x, y) {
+                    function drawMemeText(text, x, y, baseline) {
+                        ctx.textBaseline = baseline;
                         ctx.strokeText(text, x, y);
                         ctx.fillText(text, x, y);
                     }
 
                     if (topText) {
-                        ctx.textBaseline = 'top';
-                        drawMemeText(topText, image.width / 2, 20);
+                        // Beri jarak aman 5% dari atas
+                        drawMemeText(topText, image.width / 2, image.height * 0.05, 'top');
                     }
 
                     if (bottomText) {
-                        ctx.textBaseline = 'bottom';
-                        drawMemeText(bottomText, image.width / 2, image.height - 20);
+                        // Beri jarak aman 5% dari bawah
+                        drawMemeText(bottomText, image.width / 2, image.height - (image.height * 0.05), 'bottom');
                     }
 
                     const processedBuffer = canvas.toBuffer('image/jpeg');
