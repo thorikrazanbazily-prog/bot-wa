@@ -263,6 +263,9 @@ async function connectToWhatsApp() {
             const senderJid = isGroup ? (msg.key.participant || from) : from;
             const senderNumber = extractNumber(senderJid);
 
+            const isOwnerCheck = ownerNumbers.includes(senderNumber);
+            console.log(`[DEBUG] Sender Number: "${senderNumber}" | Owner List:`, ownerNumbers, `| Is Owner?: ${isOwnerCheck}`);
+            
             // Cek Hak Akses Owner & VIP
             const isOwner = ownerNumbers.includes(senderNumber);
             const isVip = vipNumbers.includes(senderNumber);
