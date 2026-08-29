@@ -1,10 +1,50 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const fs = require('fs');
-const { default: fetch } = require('node-fetch');
-const FormData = require('form-data');
+import pkg from '@whiskeysockets/baileys';
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } = pkg;
+
+import pino from 'pino';
+import qrcode from 'qrcode-terminal';
+import fs from 'fs';
+import { default: fetch } from 'node-fetch';
+import FormData from 'form-data';
+import ffmpeg from 'fluent-ffmpeg';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { writeFile, unlink } from 'fs/promises';
+
+// ==========================================
+// FUNGSI HELPER PEMBUAT STIKER (FFMPEG)
+// ==========================================
+async function makeSticker(mediaBuffer, mimeType) {
+    let ext = mimeType && mimeType.includes('video') ? 'mp4' : 'jpg';
+    let tmpFileIn = join(tmpdir(), `${Date.now()}.${ext}`);
+    let tmpFileOut = join(tmpdir(), `${Date.now()}.webp`);
+    
+    await writeFile(tmpFileIn, mediaBuffer);
+    
+    await new Promise((resolve, reject) => {
+        ffmpeg(tmpFileIn)
+            .input(tmpFileIn)
+            .on('error', (err) => reject(err))
+            .on('end', () => resolve(true))
+            .addOutputOptions([
+                "-vcodec", "libwebp",
+                "-vf", "scale='min(320,iw)':min'(320,ih)':force_original_aspect_ratio=decrease,fps=15, pad=320:320:(ow-iw)/2:(oh-ih)/2:color=0x00000000",
+                "-loop", "0",
+                "-ss", "00:00:00",
+                "-t", "00:00:05",
+                "-preset", "default",
+                "-an",
+                "-vsync", "0"
+            ])
+            .toFormat('webp')
+            .save(tmpFileOut);
+    });
+
+    let stickerBuffer = await fs.promises.readFile(tmpFileOut);
+    await unlink(tmpFileIn);
+    await unlink(tmpFileOut);
+    return stickerBuffer;
+}
 
 // ==========================================
 // KONFIGURASI OWNER, VIP & CACHE METADATA GRUP
@@ -450,7 +490,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // PINTEREST SEARCH (Diperbaiki & Lebih Stabil)
+            // PINTEREST SEARCH
             else if (command === '.pinterest' || command === '.pin') {
                 if (!textInput) {
                     return sock.sendMessage(from, { text: '⚠️ Masukkan kata kunci gambar!\nContoh: *.pinterest wallpaper estetik*' }, { quoted: msg });
@@ -492,151 +532,126 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // STIKER MEME (SMEME) - Diperbaiki untuk mengatasi error 415
+            // STIKER MEME (SMEME)
             else if (command === '.smeme' || command === '.memesticker') {
-    try {
-        const contextInfo = msg.message.extendedTextMessage?.contextInfo;
-        const qMsg = contextInfo?.quotedMessage;
-        const isDirectImage = msg.message.imageMessage;
-        
-        let quotedImageMsg = qMsg?.imageMessage || 
-                             qMsg?.ephemeralMessage?.message?.imageMessage || 
-                             qMsg?.viewOnceMessage?.message?.imageMessage ||
-                             qMsg?.viewOnceMessageV2?.message?.imageMessage;
+                try {
+                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+                    const qMsg = contextInfo?.quotedMessage;
+                    const isDirectImage = msg.message.imageMessage;
+                    
+                    let quotedImageMsg = qMsg?.imageMessage || 
+                                         qMsg?.ephemeralMessage?.message?.imageMessage || 
+                                         qMsg?.viewOnceMessage?.message?.imageMessage ||
+                                         qMsg?.viewOnceMessageV2?.message?.imageMessage;
 
-        if (!isDirectImage && !quotedImageMsg) {
-            return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan format:\n*.smeme <teks atas>* atau\n*.smeme <teks atas> | <teks bawah>*' }, { quoted: msg });
-        }
-
-        if (!textInput) {
-            return sock.sendMessage(from, { text: '⚠️ Masukkan teks meme-nya!\nContoh: *.smeme Teks Atas | Teks Bawah*' }, { quoted: msg });
-        }
-
-        await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
-
-        let mediaTarget = msg;
-        if (quotedImageMsg) {
-            mediaTarget = {
-                key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
-                message: qMsg
-            };
-        }
-
-        let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-        if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Gagal mendownload media.');
-
-        // Tetap menggunakan Catbox hanya untuk mendapatkan URL publik sementara yang bersih
-        let imageUrl = await uploadToCatbox(mediaBuffer, 'meme.jpg');
-        if (!imageUrl || !imageUrl.startsWith('http')) {
-            return sock.sendMessage(from, { text: '❌ Gagal mengunggah media sementara.' }, { quoted: msg });
-        }
-
-        let topText = '';
-        let bottomText = '';
-
-        if (textInput.includes('|')) {
-            let parts = textInput.split('|').map(s => s.trim());
-            topText = parts[0] || '';
-            bottomText = parts[1] || '';
-        } else {
-            topText = textInput;
-            bottomText = '';
-        }
-
-        // Menggunakan API Maker Meme alternatif yang lebih stabil
-        let memeApiUrl = `https://api.siputzx.my.id/api/maker/meme?url=${encodeURIComponent(imageUrl)}&text1=${encodeURIComponent(topText)}&text2=${encodeURIComponent(bottomText)}`;
-        
-        let memeRes = await fetch(memeApiUrl);
-        if (!memeRes.ok) {
-            throw new Error(`Gagal merender meme (Status: ${memeRes.status})`);
-        }
-        
-        let memeBuffer = Buffer.from(await memeRes.arrayBuffer());
-
-        const sticker = new Sticker(memeBuffer, {
-            pack: 'Meme Sticker',
-            author: 'Bot Riq',
-            type: StickerTypes.FULL,
-            quality: 70
-        });
-
-        const stickerBuffer = await sticker.toBuffer();
-        await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-
-    } catch (err) {
-        console.error('Error Smeme:', err);
-        await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme. (Detail: ${err.message})` }, { quoted: msg });
-    }
-}
-
-// BUTTON
-else if (command === '.cn') {
-    let query = textInput || 'riq ganteng';
-    
-    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
-
-    try {
-        await sock.relayMessage(
-            from,
-            {
-                "interactiveMessage": {
-                    "body": {
-                        "text": `haii ${query}`
-                    },
-                    "footer": {
-                        "text": "CN Generator | riq"
-                    },
-                    "nativeFlowMessage": {
-                        "buttons": [
-                            {
-                                "name": "cta_copy",
-                                "buttonParamsJson": JSON.stringify({
-                                    "display_text": "CN !",
-                                    "copy_code": `水 ${query}`
-                                })
-                            }
-                        ],
-                        "messageParamsJson": "{}"
+                    if (!isDirectImage && !quotedImageMsg) {
+                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan format:\n*.smeme <teks atas>* atau\n*.smeme <teks atas> | <teks bawah>*' }, { quoted: msg });
                     }
+
+                    if (!textInput) {
+                        return sock.sendMessage(from, { text: '⚠️ Masukkan teks meme-nya!\nContoh: *.smeme Teks Atas | Teks Bawah*' }, { quoted: msg });
+                    }
+
+                    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
+
+                    let mediaTarget = msg;
+                    if (quotedImageMsg) {
+                        mediaTarget = {
+                            key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
+                            message: qMsg
+                        };
+                    }
+
+                    let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Gagal mendownload media.');
+
+                    let imageUrl = await uploadToCatbox(mediaBuffer, 'meme.jpg');
+                    if (!imageUrl || !imageUrl.startsWith('http')) {
+                        return sock.sendMessage(from, { text: '❌ Gagal mengunggah media sementara.' }, { quoted: msg });
+                    }
+
+                    let topText = '';
+                    let bottomText = '';
+
+                    if (textInput.includes('|')) {
+                        let parts = textInput.split('|').map(s => s.trim());
+                        topText = parts[0] || '';
+                        bottomText = parts[1] || '';
+                    } else {
+                        topText = textInput;
+                        bottomText = '';
+                    }
+
+                    let memeApiUrl = `https://api.siputzx.my.id/api/maker/meme?url=${encodeURIComponent(imageUrl)}&text1=${encodeURIComponent(topText)}&text2=${encodeURIComponent(bottomText)}`;
+                    let memeRes = await fetch(memeApiUrl);
+                    if (!memeRes.ok) throw new Error(`Gagal merender meme (Status: ${memeRes.status})`);
+                    
+                    let memeBuffer = Buffer.from(await memeRes.arrayBuffer());
+                    let stickerBuffer = await makeSticker(memeBuffer, 'image/jpeg');
+
+                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+
+                } catch (err) {
+                    console.error('Error Smeme:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme. (Detail: ${err.message})` }, { quoted: msg });
                 }
-            },
-            {
-                quoted: msg,
-                "additionalNodes": [
-                    {
-                        "tag": "biz",
-                        "attrs": {},
-                        "content": [
-                            {
-                                "tag": "interactive",
-                                "attrs": {
-                                    "type": "native_flow",
-                                    "v": "1"
-                                },
-                                "content": [
-                                    {
-                                        "tag": "native_flow",
-                                        "attrs": {
-                                            "v": "9",
-                                            "name": "mixed"
-                                        }
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
             }
-        );
 
-        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+            // BUTTON CN
+            else if (command === '.cn') {
+                let query = textInput || 'riq ganteng';
+                await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-    } catch (err) {
-        console.error('Error Relay Message CTA Copy:', err);
-        await sock.sendMessage(from, { text: `❌ Gagal mengirim pesan interaktif. (Detail: ${err.message})` }, { quoted: msg });
-    }
-}
+                try {
+                    await sock.relayMessage(
+                        from,
+                        {
+                            "interactiveMessage": {
+                                "body": { "text": `haii ${query}` },
+                                "footer": { "text": "CN Generator | riq" },
+                                "nativeFlowMessage": {
+                                    "buttons": [
+                                        {
+                                            "name": "cta_copy",
+                                            "buttonParamsJson": JSON.stringify({
+                                                "display_text": "CN !",
+                                                "copy_code": `水 ${query}`
+                                            })
+                                        }
+                                    ],
+                                    "messageParamsJson": "{}"
+                                }
+                            }
+                        },
+                        {
+                            quoted: msg,
+                            "additionalNodes": [
+                                {
+                                    "tag": "biz",
+                                    "attrs": {},
+                                    "content": [
+                                        {
+                                            "tag": "interactive",
+                                            "attrs": { "type": "native_flow", "v": "1" },
+                                            "content": [
+                                                {
+                                                    "tag": "native_flow",
+                                                    "attrs": { "v": "9", "name": "mixed" }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    );
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+                } catch (err) {
+                    console.error('Error Relay Message CTA Copy:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal mengirim pesan interaktif. (Detail: ${err.message})` }, { quoted: msg });
+                }
+            }
 
             // SHORT LINK
             else if (command === '.short' || command === '.shortlink' || command === '.tinyurl') {
@@ -751,9 +766,7 @@ else if (command === '.cn') {
                     else if (command === '.setwelcome') {
                         const newWelcomeText = textInput;
                         if (!newWelcomeText) {
-                            return sock.sendMessage(from, { 
-                                text: `⚠️ Masukkan teks sambutan!\nContoh:\n*.setwelcome Halo @user, selamat datang di @subject!*` 
-                            }, { quoted: msg });
+                            return sock.sendMessage(from, { text: `⚠️ Masukkan teks sambutan!\nContoh:\n*.setwelcome Halo @user, selamat datang di @subject!*` }, { quoted: msg });
                         }
 
                         welcomeSettings[from].text = newWelcomeText;
@@ -768,23 +781,29 @@ else if (command === '.cn') {
                 }
             }
 
-            // STIKER
+            // STIKER (Menggunakan makeSticker FFMPEG)
             else if (command === '.sticker' || command === '.stiker' || command === '.s') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
                     const isDirectImage = msg.message.imageMessage;
+                    const isDirectVideo = msg.message.videoMessage;
                     
-                    let quotedImageMsg = qMsg?.imageMessage || 
+                    let quotedMediaMsg = qMsg?.imageMessage || 
+                                         qMsg?.videoMessage ||
                                          qMsg?.ephemeralMessage?.message?.imageMessage || 
-                                         qMsg?.viewOnceMessage?.message?.imageMessage;
+                                         qMsg?.ephemeralMessage?.message?.videoMessage || 
+                                         qMsg?.viewOnceMessage?.message?.imageMessage ||
+                                         qMsg?.viewOnceMessage?.message?.videoMessage;
 
-                    if (!isDirectImage && !quotedImageMsg) {
-                        return sock.sendMessage(from, { text: '⚠️ Kirim foto dengan caption *.stiker* atau reply foto!' }, { quoted: msg });
+                    if (!isDirectImage && !isDirectVideo && !quotedMediaMsg) {
+                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto/video dengan caption *.stiker*!' }, { quoted: msg });
                     }
 
                     let mediaTarget = msg;
-                    if (quotedImageMsg) {
+                    let mimeType = isDirectVideo ? 'video/mp4' : (isDirectImage ? 'image/jpeg' : (quotedMediaMsg?.mimetype || 'image/jpeg'));
+
+                    if (quotedMediaMsg) {
                         mediaTarget = {
                             key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
                             message: qMsg
@@ -794,14 +813,7 @@ else if (command === '.cn') {
                     let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer kosong.');
 
-                    const sticker = new Sticker(mediaBuffer, {
-                        pack: '',
-                        author: '',
-                        type: StickerTypes.FULL,
-                        quality: 70
-                    });
-
-                    const stickerBuffer = await sticker.toBuffer();
+                    let stickerBuffer = await makeSticker(mediaBuffer, mimeType);
                     await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
@@ -816,16 +828,11 @@ else if (command === '.cn') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
-
                     let quotedStickerMsg = qMsg?.stickerMessage || qMsg?.ephemeralMessage?.message?.stickerMessage;
 
                     if (!quotedStickerMsg) {
-                        return sock.sendMessage(from, { text: '⚠️ Reply stiker yang ingin diubah watermark-nya!\nContoh: *.wm Packname | Author*' }, { quoted: msg });
+                        return sock.sendMessage(from, { text: '⚠️ Reply stiker yang ingin diambil/dibuat ulang!' }, { quoted: msg });
                     }
-
-                    const [packName, authorName] = textInput.split('|').map(str => str ? str.trim() : '');
-                    const finalPack = packName || 'Created By';
-                    const finalAuthor = authorName || 'My Bot';
 
                     const mediaTarget = {
                         key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
@@ -835,20 +842,11 @@ else if (command === '.cn') {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer stiker kosong.');
 
-                    const sticker = new Sticker(mediaBuffer, {
-                        pack: finalPack,
-                        author: finalAuthor,
-                        type: StickerTypes.FULL,
-                        quality: 70
-                    });
-
-                    const stickerBuffer = await sticker.toBuffer();
-                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+                    await sock.sendMessage(from, { sticker: mediaBuffer }, { quoted: msg });
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-
                 } catch (err) {
                     console.error('Error Watermark Detail:', err);
-                    await sock.sendMessage(from, { text: '❌ Gagal mengubah watermark stiker.' }, { quoted: msg });
+                    await sock.sendMessage(from, { text: '❌ Gagal memproses stiker.' }, { quoted: msg });
                 }
             }
 
@@ -1077,7 +1075,6 @@ else if (command === '.cn') {
 
                     if (command === '.masukin') {
                         let targetNumber = textInput ? textInput.replace(/[^0-9]/g, '') : '';
-                        
                         if (!targetNumber) {
                             return sock.sendMessage(from, { text: '⚠️ Masukkan nomor!\nContoh: *.masukin 628xxxxxxxxxx*' }, { quoted: msg });
                         }
@@ -1132,3 +1129,4 @@ else if (command === '.cn') {
 } 
 
 connectToWhatsApp();
+
