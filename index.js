@@ -2,13 +2,9 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, downlo
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
-import FormData from 'form-data';
 import fetch from 'node-fetch'; 
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { writeFile, unlink } from 'fs/promises';
-import { Jimp } from 'jimp';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
@@ -533,11 +529,9 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // SMEME (Stiker Meme Menggunakan Canvas - Hasil Terbaik & Ada Garis Tepi Teks)
+            // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
             else if (command === '.smeme') {
                 try {
-                    const { loadImage, createCanvas } = await import('@napi-rs/canvas');
-                    
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
                     
@@ -554,77 +548,56 @@ async function connectToWhatsApp() {
 
                     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-                    // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
                     let topText = parts[0] ? parts[0].trim().toUpperCase() : '';
                     let bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
 
-                    // Unduh media gambar
                     let mediaTarget;
-                    let mimeType = 'image/jpeg';
-
                     if (isCurrentImage) {
                         mediaTarget = msg;
-                        mimeType = msg.message.imageMessage.mimetype || 'image/jpeg';
                     } else {
                         mediaTarget = {
                             key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
                             message: qMsg
                         };
-                        mimeType = qMsg?.imageMessage?.mimetype || qMsg?.ephemeralMessage?.message?.imageMessage?.mimetype || 'image/jpeg';
                     }
 
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Muat gambar ke Canvas
+                    // Load gambar menggunakan @napi-rs/canvas
                     const image = await loadImage(mediaBuffer);
-                    
-                    // Batasi ukuran maksimal canvas agar optimal jadi stiker (misal 512x512)
-                    let canvasWidth = 512;
-                    let canvasHeight = Math.floor((image.height / image.width) * canvasWidth);
-                    if (canvasHeight > 512) {
-                        canvasHeight = 512;
-                        canvasWidth = Math.floor((image.width / image.height) * canvasHeight);
-                    }
-
-                    const canvas = createCanvas(canvasWidth, canvasHeight);
+                    const canvas = createCanvas(image.width, image.height);
                     const ctx = canvas.getContext('2d');
 
-                    // Gambar foto ke canvas
-                    ctx.drawImage(image, 0, 0, canvasWidth, canvasHeight);
+                    ctx.drawImage(image, 0, 0, image.width, image.height);
 
-                    // Konfigurasi Gaya Teks Meme (Huruf Tebal + Garis Tepi Hitam)
-                    ctx.font = 'bold 36px Impact, sans-serif';
+                    // Konfigurasi Style Teks Meme (Impact font style)
+                    const fontSize = Math.floor(image.width / 10);
+                    ctx.font = `bold ${fontSize}pt Impact, sans-serif`;
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
-                    ctx.lineWidth = 4;
+                    ctx.lineWidth = Math.max(3, Math.floor(fontSize / 10));
                     ctx.textAlign = 'center';
-                    ctx.lineJoin = 'miter';
-                    ctx.miterLimit = 2;
 
-                    // Fungsi pembantu untuk menggambar teks dengan outline
+                    // Fungsi pembantu render teks dengan outline hitam
                     function drawMemeText(text, x, y) {
                         ctx.strokeText(text, x, y);
                         ctx.fillText(text, x, y);
                     }
 
-                    // Render Teks Atas
                     if (topText) {
                         ctx.textBaseline = 'top';
-                        drawMemeText(topText, canvasWidth / 2, 15);
+                        drawMemeText(topText, image.width / 2, 20);
                     }
 
-                    // Render Teks Bawah
                     if (bottomText) {
                         ctx.textBaseline = 'bottom';
-                        drawMemeText(bottomText, canvasWidth / 2, canvasHeight - 15);
+                        drawMemeText(bottomText, image.width / 2, image.height - 20);
                     }
 
-                    // Ambil hasil gambar dari canvas dalam bentuk buffer PNG
-                    const processedBuffer = canvas.toBuffer('image/png');
+                    const processedBuffer = canvas.toBuffer('image/jpeg');
 
-                    // Buat stiker WhatsApp
                     const sticker = new Sticker(processedBuffer, {
                         pack: '',
                         author: '',
@@ -639,7 +612,7 @@ async function connectToWhatsApp() {
 
                 } catch (err) {
                     console.error('Error Smeme Canvas:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme menggunakan Canvas.` }, { quoted: msg });
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme: ${err.message}` }, { quoted: msg });
                 }
             }
 
