@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
@@ -47,7 +47,7 @@ async function makeSticker(mediaBuffer, mimeType) {
 // KONFIGURASI OWNER, VIP & CACHE METADATA GRUP
 // ==========================================
 
-const OWNER_NUMBERS = ['6281298697777', '6283189974022']; // Owner ditambah
+const OWNER_NUMBERS = ['6281298697777', '6283189974022']; 
 const VIP_NUMBERS = ['6287745163112'];   
 
 // CACHE RAM MEMORI UNTUK RESPON GRUP CEPAT (ANTI-DELAY)
@@ -82,7 +82,7 @@ async function getGroupMetadataCached(sock, groupId) {
     return metadata;
 }
 
-// Fungsi membaca settingan bot (Diubah default-nya jadi true/public)
+// Fungsi membaca settingan bot
 const loadSettings = () => {
     try {
         if (fs.existsSync(SETTINGS_FILE)) {
@@ -125,7 +125,7 @@ const saveAllowedGroups = (groups) => {
     }
 };
 
-let isPublicMode = true; // Diubah langsung menjadi true (Public Bot)
+let isPublicMode = loadSettings();
 
 // Fungsi Database RPG
 const loadRpgDb = () => {
@@ -1126,4 +1126,3 @@ async function connectToWhatsApp() {
 } 
 
 connectToWhatsApp();
-
