@@ -1,10 +1,8 @@
 import pkg from '@whiskeysockets/baileys';
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage, generateWAMessageFromContent, proto } = pkg;
-
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import FormData from 'form-data';
 import ffmpeg from 'fluent-ffmpeg';
 import { tmpdir } from 'os';
