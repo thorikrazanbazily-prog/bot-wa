@@ -160,7 +160,7 @@ async function uploadToCatbox(buffer, filename = 'file.jpg') {
         
         const resultUrl = await res.text();
         return resultUrl.trim();
-    } graph (err) { // Perhatikan bagian catch di bawah jika di file asli menggunakan catch
+    } catch (err) {
         console.error('Gagal upload ke Catbox:', err);
         return null;
     }
