@@ -533,9 +533,11 @@ async function connectToWhatsApp() {
                 }
             }
 
-                                                 // SMEME (Stiker Meme Langsung Tanpa Upload Teleg.ph)
+            // SMEME (Stiker Meme Menggunakan Canvas - Hasil Terbaik & Ada Garis Tepi Teks)
             else if (command === '.smeme') {
                 try {
+                    const { loadImage, createCanvas } = await import('@napi-rs/canvas');
+                    
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
                     
@@ -554,10 +556,10 @@ async function connectToWhatsApp() {
 
                     // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
-                    let topText = parts[0] ? parts[0].trim() : '_';
-                    let bottomText = parts[1] ? parts[1].trim() : '_';
+                    let topText = parts[0] ? parts[0].trim().toUpperCase() : '';
+                    let bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
 
-                    // Unduh media gambar dari pesan
+                    // Unduh media gambar
                     let mediaTarget;
                     let mimeType = 'image/jpeg';
 
@@ -575,35 +577,55 @@ async function connectToWhatsApp() {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Ubah buffer ke format base64 data uri
-                    const base64Image = `data:${mimeType};base64,${mediaBuffer.toString('base64')}`;
-
-                    // Kirim ke API memegen menggunakan JSON payload POST langsung (Tidak butuh teleg.ph & aman dari error SSL Termux)
-                    const response = await fetch('https://api.memegen.link/images/custom', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            background: base64Image,
-                            lines: [topText, bottomText],
-                            extension: 'png'
-                        })
-                    });
-
-                    const resJson = await response.json();
+                    // Muat gambar ke Canvas
+                    const image = await loadImage(mediaBuffer);
                     
-                    if (!response.ok || !resJson.url) {
-                        throw new Error(resJson.message || 'Gagal memproses gambar meme.');
+                    // Batasi ukuran maksimal canvas agar optimal jadi stiker (misal 512x512)
+                    let canvasWidth = 512;
+                    let canvasHeight = Math.floor((image.height / image.width) * canvasWidth);
+                    if (canvasHeight > 512) {
+                        canvasHeight = 512;
+                        canvasWidth = Math.floor((image.width / image.height) * canvasHeight);
                     }
 
-                    // Ambil hasil gambar meme dari URL internal API
-                    const memeRes = await fetch(resJson.url);
-                    const memeBuffer = await memeRes.buffer();
+                    const canvas = createCanvas(canvasWidth, canvasHeight);
+                    const ctx = canvas.getContext('2d');
 
-                    // Buat stiker
-                    const sticker = new Sticker(memeBuffer, {
+                    // Gambar foto ke canvas
+                    ctx.drawImage(image, 0, 0, canvasWidth, canvasHeight);
+
+                    // Konfigurasi Gaya Teks Meme (Huruf Tebal + Garis Tepi Hitam)
+                    ctx.font = 'bold 36px Impact, sans-serif';
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 4;
+                    ctx.textAlign = 'center';
+                    ctx.lineJoin = 'miter';
+                    ctx.miterLimit = 2;
+
+                    // Fungsi pembantu untuk menggambar teks dengan outline
+                    function drawMemeText(text, x, y) {
+                        ctx.strokeText(text, x, y);
+                        ctx.fillText(text, x, y);
+                    }
+
+                    // Render Teks Atas
+                    if (topText) {
+                        ctx.textBaseline = 'top';
+                        drawMemeText(topText, canvasWidth / 2, 15);
+                    }
+
+                    // Render Teks Bawah
+                    if (bottomText) {
+                        ctx.textBaseline = 'bottom';
+                        drawMemeText(bottomText, canvasWidth / 2, canvasHeight - 15);
+                    }
+
+                    // Ambil hasil gambar dari canvas dalam bentuk buffer PNG
+                    const processedBuffer = canvas.toBuffer('image/png');
+
+                    // Buat stiker WhatsApp
+                    const sticker = new Sticker(processedBuffer, {
                         pack: '',
                         author: '',
                         type: StickerTypes.FULL,
@@ -616,8 +638,8 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
-                    console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan ukuran gambar tidak terlalu besar!` }, { quoted: msg });
+                    console.error('Error Smeme Canvas:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme menggunakan Canvas.` }, { quoted: msg });
                 }
             }
 
