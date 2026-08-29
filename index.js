@@ -58,8 +58,8 @@ async function makeSticker(mediaBuffer, mimeType) {
         }
 
         const sticker = new Sticker(bufferObj, {
-            pack: 'Bot Riq Imup',      // Nama Pack Stiker
-            author: 'Thoriq',          // Nama Pembuat / Author
+            pack: '',      // Nama Pack Stiker
+            author: '',          // Nama Pembuat / Author
             type: StickerTypes.FULL,   // Jenis stiker (FULL / CROP)
             quality: 60                // Kualitas kompresi stiker (1-100)
         });
