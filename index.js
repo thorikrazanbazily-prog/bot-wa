@@ -62,10 +62,10 @@ const WELCOME_SETTINGS_FILE = 'welcome_settings.json';
 // Helper presisi mengekstrak digit angka saja
 const extractNumber = (jid) => {
     if (!jid || typeof jid !== 'string') return '';
+    // Hapus device specifier (:3 dll), domain (@s.whatsapp.net, @g.us), dan ambil angkanya saja
     const clean = jid.split('@')[0].split(':')[0];
     return clean.replace(/[^0-9]/g, '');
 };
-
 // HELPER CACHE METADATA GRUP (Menghindari Fetch Berulang ke Server WA)
 async function getGroupMetadataCached(sock, groupId) {
     const now = Date.now();
@@ -281,9 +281,8 @@ async function connectToWhatsApp() {
 
             const from = msg.key.remoteJid;
             const isGroup = from.endsWith('@g.us');
-            const senderJid = msg.key.participant || msg.key.remoteJid;
-            const senderNumber = extractNumber(senderJid);
-
+            const senderJid = isGroup ? (msg.key.participant || from) : from;
+const senderNumber = extractNumber(senderJid);
             let body = '';
             const type = Object.keys(msg.message)[0];
 
@@ -305,8 +304,8 @@ async function connectToWhatsApp() {
             const textInput = args.join(' ');
 
             const isOwner = msg.key.fromMe || OWNER_NUMBERS.includes(senderNumber);
-            const isVIP = VIP_NUMBERS.includes(senderNumber);
-
+const isVIP = VIP_NUMBERS.includes(senderNumber);
+            
             // ==========================================
             // FITUR PENGATURAN MODE PUBLIC / PRIVATE
             // ==========================================
