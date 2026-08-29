@@ -3,7 +3,7 @@ import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
 import FormData from 'form-data';
-import ffmpeg from 'fluent-ffmpeg';
+import Jimp from 'jimp'; // <-- Menggunakan Jimp, pastikan sudah di-install (npm install jimp)
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFile, unlink } from 'fs/promises';
@@ -12,7 +12,7 @@ import { writeFile, unlink } from 'fs/promises';
 // KONFIGURASI OWNER & VIP
 // ==========================================
 const ownerNumbers = ['255164158062616']; // Nomor Owner Anda
-const vipNumbers = []; // Tambahkan nomor VIP jika ada (format string: '628xxxxxxxx')
+const vipNumbers = []; // Tambahkan nomor VIP jika ada
 
 // ==========================================
 // FILE LOKAL DATABASE KONTROL & SETTINGAN
@@ -43,7 +43,7 @@ const saveBotControl = (control) => {
 };
 
 // ==========================================
-// FUNGSI HELPER PEMBUAT STIKER (FFMPEG)
+// FUNGSI HELPER PEMBUAT STIKER (JIMP - TERMUX FRIENDLY)
 // ==========================================
 async function makeSticker(mediaBuffer, mimeType) {
     try {
