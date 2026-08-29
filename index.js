@@ -53,22 +53,34 @@ async function makeSticker(mediaBuffer, mimeType) {
     await writeFile(tmpFileIn, mediaBuffer);
     
     await new Promise((resolve, reject) => {
-        ffmpeg(tmpFileIn)
-            .input(tmpFileIn)
-            .on('error', (err) => reject(err))
-            .on('end', () => resolve(true))
-            .addOutputOptions([
+        let command = ffmpeg(tmpFileIn)
+            .on('error', (err) => {
+                console.error('FFmpeg Error Detail:', err);
+                reject(err);
+            })
+            .on('end', () => resolve(true));
+
+        if (ext === 'mp4') {
+            command.outputOptions([
                 "-vcodec", "libwebp",
-                "-vf", "scale='min(320,iw)':min'(320,ih)':force_original_aspect_ratio=decrease,fps=15, pad=320:320:(ow-iw)/2:(oh-ih)/2:color=0x00000000",
+                "-vf", "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000",
                 "-loop", "0",
                 "-ss", "00:00:00",
                 "-t", "00:00:05",
                 "-preset", "default",
                 "-an",
                 "-vsync", "0"
-            ])
-            .toFormat('webp')
-            .save(tmpFileOut);
+            ]).toFormat('webp');
+        } else {
+            command.outputOptions([
+                "-vcodec", "libwebp",
+                "-vf", "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000",
+                "-q:v", "75",
+                "-lossless", "0"
+            ]).toFormat('webp');
+        }
+
+        command.save(tmpFileOut);
     });
 
     let stickerBuffer = await fs.promises.readFile(tmpFileOut);
