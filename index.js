@@ -9,6 +9,40 @@ import { join } from 'path';
 import { writeFile, unlink } from 'fs/promises';
 
 // ==========================================
+// KONFIGURASI OWNER & VIP
+// ==========================================
+const ownerNumbers = ['6281298697777']; // Nomor Owner Anda
+const vipNumbers = []; // Tambahkan nomor VIP jika ada (format string: '628xxxxxxxx')
+
+// ==========================================
+// FILE LOKAL DATABASE KONTROL & SETTINGAN
+// ==========================================
+const CONTROL_FILE = 'bot_control.json';
+const SETTINGS_FILE = 'bot_settings.json';
+const DB_RPG_FILE = 'rpg.json';
+const WELCOME_SETTINGS_FILE = 'welcome_settings.json';
+
+// Helper load & save kontrol bot (private/public & whitelist gc)
+const loadBotControl = () => {
+    try {
+        if (fs.existsSync(CONTROL_FILE)) {
+            return JSON.parse(fs.readFileSync(CONTROL_FILE, 'utf8'));
+        }
+    } catch (e) {
+        console.error('Gagal membaca bot_control.json:', e);
+    }
+    return { isPrivate: false, allowedGroups: [] };
+};
+
+const saveBotControl = (control) => {
+    try {
+        fs.writeFileSync(CONTROL_FILE, JSON.stringify(control, null, 2));
+    } catch (e) {
+        console.error('Gagal menyimpan bot_control.json:', e);
+    }
+};
+
+// ==========================================
 // FUNGSI HELPER PEMBUAT STIKER (FFMPEG)
 // ==========================================
 async function makeSticker(mediaBuffer, mimeType) {
@@ -44,20 +78,11 @@ async function makeSticker(mediaBuffer, mimeType) {
 }
 
 // ==========================================
-// KONFIGURASI OWNER, VIP & CACHE METADATA GRUP
+// CACHE & DATABASE CONFIG
 // ==========================================
-
-const OWNER_NUMBERS = ['6281298697777', '6283189974022']; 
-const VIP_NUMBERS = ['6287745163112'];   
 
 // CACHE RAM MEMORI UNTUK RESPON GRUP CEPAT (ANTI-DELAY)
 const groupMembersCache = {};
-
-// FILE LOKAL UNTUK MENYIMPAN SETTINGAN & DATABASE
-const SETTINGS_FILE = 'bot_settings.json';
-const DB_RPG_FILE = 'rpg.json';
-const ALLOWED_GROUPS_FILE = 'allowed_groups.json';
-const WELCOME_SETTINGS_FILE = 'welcome_settings.json';
 
 // Helper presisi mengekstrak digit angka saja
 const extractNumber = (jid) => {
@@ -81,50 +106,6 @@ async function getGroupMetadataCached(sock, groupId) {
     }
     return metadata;
 }
-
-// Fungsi membaca settingan bot
-const loadSettings = () => {
-    try {
-        if (fs.existsSync(SETTINGS_FILE)) {
-            const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-            const parsed = JSON.parse(data);
-            return parsed.isPublicMode !== undefined ? parsed.isPublicMode : true;
-        }
-    } catch (e) {
-        console.error('Gagal membaca settingan:', e);
-    }
-    return true;
-};
-
-// Fungsi menyimpan settingan bot
-const saveSettings = (isPublic) => {
-    try {
-        fs.writeFileSync(SETTINGS_FILE, JSON.stringify({ isPublicMode: isPublic }, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan settingan:', e);
-    }
-};
-
-const loadAllowedGroups = () => {
-    try {
-        if (fs.existsSync(ALLOWED_GROUPS_FILE)) {
-            return JSON.parse(fs.readFileSync(ALLOWED_GROUPS_FILE, 'utf8'));
-        }
-    } catch (e) {
-        console.error('Gagal membaca database allowed groups:', e);
-    }
-    return [];
-};
-
-const saveAllowedGroups = (groups) => {
-    try {
-        fs.writeFileSync(ALLOWED_GROUPS_FILE, JSON.stringify(groups, null, 2));
-    } catch (e) {
-        console.error('Gagal menyimpan database allowed groups:', e);
-    }
-};
-
-let isPublicMode = loadSettings();
 
 const loadRpgDb = () => {
     try {
@@ -275,7 +256,6 @@ async function connectToWhatsApp() {
             
             if (!msg.message || msg.key.remoteJid === 'status@broadcast') return;
 
-            // Tandai pesan sudah dibaca (Opsional, abaikan jika bikin error)
             await sock.readMessages([msg.key]).catch(() => {});
 
             const from = msg.key.remoteJid;
@@ -283,7 +263,23 @@ async function connectToWhatsApp() {
             const senderJid = isGroup ? (msg.key.participant || from) : from;
             const senderNumber = extractNumber(senderJid);
 
-            // Perbaikan ekstraksi isi pesan agar aman dari berbagai variasi wrapper Baileys
+            // Cek Hak Akses Owner & VIP
+            const isOwner = ownerNumbers.includes(senderNumber);
+            const isVip = vipNumbers.includes(senderNumber);
+            const isOwnerOrVip = isOwner || isVip;
+
+            // Kontrol Bot (Private / Public / Whitelist GC)
+            const botControl = loadBotControl();
+            if (botControl.isPrivate && !isOwnerOrVip) {
+                if (isGroup) {
+                    // Jika mode private, cek apakah grup ini di-whitelist
+                    if (!botControl.allowedGroups.includes(from)) return;
+                } else {
+                    // Jika di chat pribadi dan bukan owner/vip, abaikan
+                    return;
+                }
+            }
+
             const messageContent = msg.message.ephemeralMessage?.message || 
                                    msg.message.viewOnceMessage?.message || 
                                    msg.message.viewOnceMessageV2?.message || 
@@ -307,77 +303,65 @@ async function connectToWhatsApp() {
             const command = args.length > 0 ? args.shift().toLowerCase() : '';
             const textInput = args.join(' ');
 
-            const isOwner = msg.key.fromMe || OWNER_NUMBERS.includes(senderNumber);
-            const isVIP = VIP_NUMBERS.includes(senderNumber);
-            
             // ==========================================
-            // FITUR PENGATURAN MODE PUBLIC / PRIVATE
+            // FITUR KONTROL OWNER & VIP (.private, .public, .addgc, .delgc)
             // ==========================================
-            if (command === '.public') {
-                if (!isOwner && !isVIP) {
-                    return sock.sendMessage(from, { text: '❌ Perintah khusus Owner atau VIP!' }, { quoted: msg });
+            if (['.private', '.public', '.addgc', '.delgc'].includes(command)) {
+                if (!isOwnerOrVip) {
+                    return sock.sendMessage(from, { text: '❌ Perintah ini khusus untuk *Owner* dan *VIP*!' }, { quoted: msg });
                 }
-                isPublicMode = true;
-                saveSettings(isPublicMode);
-                await sock.sendMessage(from, { text: '🌐 Bot berhasil diubah ke mode *PUBLIC*!\nSemua orang sekarang dapat menggunakan bot.' }, { quoted: msg });
-                await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-                return;
-            }
-            else if (command === '.private') {
-                if (!isOwner && !isVIP) {
-                    return sock.sendMessage(from, { text: '❌ Perintah khusus Owner atau VIP!' }, { quoted: msg });
+
+                let control = loadBotControl();
+
+                if (command === '.private') {
+                    control.isPrivate = true;
+                    saveBotControl(control);
+                    await sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke mode *PRIVATE* (Hanya Owner/VIP & Grup yang di-whitelist).' }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+                } 
+                else if (command === '.public') {
+                    control.isPrivate = false;
+                    saveBotControl(control);
+                    await sock.sendMessage(from, { text: '🔓 Bot berhasil diubah ke mode *PUBLIC* (Dapat digunakan oleh siapa saja).' }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+                } 
+                else if (command === '.addgc') {
+                    if (!isGroup) {
+                        return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    }
+                    if (control.allowedGroups.includes(from)) {
+                        return sock.sendMessage(from, { text: '⚠️ Grup ini sudah terdaftar dalam akses bot.' }, { quoted: msg });
+                    }
+                    control.allowedGroups.push(from);
+                    saveBotControl(control);
+                    await sock.sendMessage(from, { text: '✅ Grup ini berhasil diberikan akses (whitelist) untuk menggunakan bot!' }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+                } 
+                else if (command === '.delgc') {
+                    if (!isGroup) {
+                        return sock.sendMessage(from, { text: '❌ Perintah ini hanya bisa digunakan di dalam grup!' }, { quoted: msg });
+                    }
+                    const index = control.allowedGroups.indexOf(from);
+                    if (index === -1) {
+                        return sock.sendMessage(from, { text: '⚠️ Grup ini tidak ada dalam daftar izin bot.' }, { quoted: msg });
+                    }
+                    control.allowedGroups.splice(index, 1);
+                    saveBotControl(control);
+                    await sock.sendMessage(from, { text: '❌ Akses grup ini telah dicabut dari bot.' }, { quoted: msg });
+                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
                 }
-                isPublicMode = false;
-                saveSettings(isPublicMode);
-                await sock.sendMessage(from, { text: '🔒 Bot berhasil diubah ke mode *PRIVATE*!\nHanya Owner, VIP, dan grup yang diizinkan yang dapat menggunakan bot.' }, { quoted: msg });
-                await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-                return;
             }
-
-            // KONTROL AKSES GRUP
-            if (command === '.addgc') {
-                if (!isOwner && !isVIP) return sock.sendMessage(from, { text: '❌ Perintah khusus Owner atau VIP!' }, { quoted: msg });
-                if (!isGroup) return sock.sendMessage(from, { text: '❌ Hanya bisa di dalam grup!' }, { quoted: msg });
-
-                let allowedGroups = loadAllowedGroups();
-                if (allowedGroups.includes(from)) {
-                    return sock.sendMessage(from, { text: '⚠️ Grup ini sudah diizinkan.' }, { quoted: msg });
-                }
-                allowedGroups.push(from);
-                saveAllowedGroups(allowedGroups);
-                await sock.sendMessage(from, { text: '✅ Berhasil mengizinkan grup ini menggunakan bot.' }, { quoted: msg });
-                return;
-            } 
-            else if (command === '.delgc' || command === '.remgc') {
-                if (!isOwner && !isVIP) return sock.sendMessage(from, { text: '❌ Perintah khusus Owner atau VIP!' }, { quoted: msg });
-                if (!isGroup) return sock.sendMessage(from, { text: '❌ Hanya bisa di dalam grup!' }, { quoted: msg });
-
-                let allowedGroups = loadAllowedGroups();
-                const index = allowedGroups.indexOf(from);
-                if (index === -1) return sock.sendMessage(from, { text: '⚠️ Grup ini tidak terdaftar.' }, { quoted: msg });
-
-                allowedGroups.splice(index, 1);
-                saveAllowedGroups(allowedGroups);
-                await sock.sendMessage(from, { text: '✅ Akses bot untuk grup ini telah dicabut.' }, { quoted: msg });
-                return;
-            }
-
-            let allowedGroups = loadAllowedGroups();
-            const isGroupAllowed = isGroup && allowedGroups.includes(from);
-            if (!isPublicMode && !isOwner && !isVIP && !isGroupAllowed) return;
 
             // MENU & PING
-            if (command === '.menu' || command === '.help') {
-                const statusMode = isPublicMode ? '🌐 PUBLIK' : '🔒 PRIVATE';
+            else if (command === '.menu' || command === '.help') {
                 const menuText = 
 `😳 *BOT RIQ IMUP* 😳
-📊 *Status Bot:* ${statusMode}
 
-⚙️ *PENGATURAN BOT (OWNER/VIP)*
-* ➔ *.public* : Mengubah bot ke mode publik
-* ➔ *.private* : Mengubah bot ke mode privat
-* ➔ *.addgc* : Memberi izin grup (di dalam grup)
-* ➔ *.delgc* : Mencabut izin grup (di dalam grup)
+👑 *OWNER & VIP TOOLS*
+* ➔ *.private* : Batasi bot hanya untuk Owner/VIP & GC whitelist
+* ➔ *.public* : Buka bot untuk umum
+* ➔ *.addgc* : Beri akses bot ke grup ini
+* ➔ *.delgc* : Cabut akses bot dari grup ini
 
 📌 *PERINTAH UTAMA*
 * ➔ *.menu* : Menampilkan menu
@@ -437,6 +421,7 @@ async function connectToWhatsApp() {
 ⚡ *Kecepatan Respon:* ${latency} ms
 ⏱️ *Uptime Bot:* ${uptimeString}
 💻 *Platform:* ${process.platform} (${process.arch})
+🤖 *Status Bot:* ${botControl.isPrivate ? '🔒 Private' : '🔓 Public'}
 
 📊 *Penggunaan Memori (RAM):*
 • RSS: ${formatMemory(usedMemory.rss)} MB
@@ -729,8 +714,8 @@ async function connectToWhatsApp() {
                     const senderParticipant = participants.find(p => extractNumber(p.id) === senderNumber);
                     const isGroupAdmin = senderParticipant && (senderParticipant.admin === 'admin' || senderParticipant.admin === 'superadmin');
 
-                    if (!isGroupAdmin && !isOwner && !isVIP) {
-                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
+                    if (!isGroupAdmin && !isOwnerOrVip) {
+                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup* atau *Owner/VIP*!' }, { quoted: msg });
                     }
 
                     let welcomeSettings = loadWelcomeSettings();
@@ -907,8 +892,8 @@ async function connectToWhatsApp() {
 
                     const isSenderAdmin = adminNumbers.includes(senderNumber);
 
-                    if (!isSenderAdmin && !isOwner && !isVIP) {
-                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
+                    if (!isSenderAdmin && !isOwnerOrVip) {
+                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup* atau *Owner/VIP*!' }, { quoted: msg });
                     }
 
                     const qMsg = msg.message.extendedTextMessage?.contextInfo?.quotedMessage;
@@ -1069,8 +1054,8 @@ async function connectToWhatsApp() {
                     const senderParticipant = participants.find(p => extractNumber(p.id) === cleanSenderNumber);
                     const isGroupAdmin = senderParticipant && (senderParticipant.admin === 'admin' || senderParticipant.admin === 'superadmin');
 
-                    if (!isGroupAdmin && !isOwner && !isVIP) {
-                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup*, *Owner*, atau *VIP*!' }, { quoted: msg });
+                    if (!isGroupAdmin && !isOwnerOrVip) {
+                        return sock.sendMessage(from, { text: '❌ Perintah khusus *Admin Grup* atau *Owner/VIP*!' }, { quoted: msg });
                     }
 
                     if (command === '.masukin') {
