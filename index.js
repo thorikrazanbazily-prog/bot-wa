@@ -140,14 +140,13 @@ const saveWelcomeSettings = (settings) => {
 };
 
 // ==========================================
-// FUNGSI HELPER TELEGRAPH UPLOAD
+// FUNGSI HELPER TELEGRAPH UPLOAD (REVISED)
 // ==========================================
 async function uploadToTelegraph(buffer, mimeType) {
     try {
         const FormData = (await import('form-data')).default;
         const form = new FormData();
         
-        // Ekstensi file berdasarkan mimetype
         let ext = 'jpg';
         if (mimeType.includes('png')) ext = 'png';
         else if (mimeType.includes('webp')) ext = 'webp';
@@ -157,15 +156,29 @@ async function uploadToTelegraph(buffer, mimeType) {
             contentType: mimeType
         });
 
+        // Menggunakan fetch dengan headers peniru browser agar lolos dari proteksi Cloudflare Telegra.ph
         const response = await fetch('https://telegra.ph/upload', {
             method: 'POST',
-            body: form
+            body: form,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
         });
-        
-        const res = await response.json();
+
+        const textRes = await response.text();
+        let res;
+        try {
+            res = JSON.parse(textRes);
+        } catch (e) {
+            throw new Error(`Respon server bukan JSON: ${textRes.substring(0, 100)}`);
+        }
+
         if (res && res[0] && res[0].src) {
             return 'https://telegra.ph' + res[0].src;
+        } else if (res && res.error) {
+            throw new Error(`Telegraph Error: ${res.error}`);
         }
+        
         throw new Error('Gagal mendapatkan URL dari Telegraph.');
     } catch (error) {
         console.error('Error uploadToTelegraph:', error);
