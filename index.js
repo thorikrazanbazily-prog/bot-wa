@@ -43,18 +43,28 @@ const saveBotControl = (control) => {
 };
 
 // ==========================================
-// FUNGSI HELPER PEMBUAT STIKER (JIMP - TERMUX FRIENDLY)
+// FUNGSI HELPER PEMBUAT STIKER (SAFE JIMP)
 // ==========================================
 async function makeSticker(mediaBuffer, mimeType) {
     try {
+        // Pastikan mediaBuffer benar-benar berbentuk Buffer yang valid
+        let bufferObj = mediaBuffer;
+        if (!Buffer.isBuffer(bufferObj)) {
+            if (Buffer.isBuffer(mediaBuffer?.buffer)) {
+                bufferObj = Buffer.from(mediaBuffer.buffer);
+            } else {
+                bufferObj = Buffer.from(mediaBuffer);
+            }
+        }
+
         // Membaca buffer gambar dengan Jimp
-        const image = await Jimp.read(mediaBuffer);
+        const image = await Jimp.read(bufferObj);
         
         // Mengatur ukuran standar stiker WhatsApp (512x512) dengan tetap menjaga rasio
         image.scaleToFit(512, 512);
         
-        // Konversi langsung ke format WebP
-        let webpBuffer = await image.getBufferAsync(Jimp.MIME_WEBP);
+        // Konversi ke format PNG buffer (lebih stabil dan kompatibel di semua versi Jimp)
+        let webpBuffer = await image.getBufferAsync(Jimp.MIME_PNG);
         return webpBuffer;
     } catch (error) {
         console.error('Gagal membuat stiker dengan Jimp:', error);
