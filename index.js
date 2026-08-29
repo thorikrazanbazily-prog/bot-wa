@@ -140,28 +140,27 @@ const saveWelcomeSettings = (settings) => {
     }
 };
 
-async function uploadToCatbox(buffer, filename = 'file.jpg') {
+async function uploadToTelegraph(buffer, filename = 'image.jpg') {
     try {
-        const FormData = (await import('form-data')).default;
+        // Membuat Blob dari buffer gambar
+        const blob = new Blob([buffer], { type: 'image/jpeg' });
+        
+        // Menggunakan FormData bawaan Node.js
         const formData = new FormData();
-        formData.append('reqtype', 'fileupload');
-        formData.append('fileToUpload', buffer, {
-            filename: filename,
-            contentType: 'image/jpeg'
-        });
-        
-        const res = await fetch('https://catbox.moe/user/api.php', {
+        formData.append('file', blob, filename);
+
+        const response = await fetch('https://telegra.ph/upload', {
             method: 'POST',
-            body: formData,
-            headers: {
-                ...formData.getHeaders()
-            }
+            body: formData
         });
-        
-        const resultUrl = await res.text();
-        return resultUrl.trim();
+
+        const result = await response.json();
+        if (result && result[0] && result[0].src) {
+            return 'https://telegra.ph' + result[0].src;
+        }
+        throw new Error('Gagal mendapatkan URL dari Telegra.ph');
     } catch (err) {
-        console.error('Gagal upload ke Catbox:', err);
+        console.error('Error Telegra.ph:', err.message);
         return null;
     }
 }
