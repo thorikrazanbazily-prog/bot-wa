@@ -580,12 +580,13 @@ async function connectToWhatsApp() {
                     ctx.drawImage(image, 0, 0, image.width, image.height);
 
                     // Ukuran font proporsional berdasarkan lebar gambar
-                    const fontSize = Math.max(20, Math.floor(image.width / 12));
-                    ctx.font = `bold ${fontSize}pt sans-serif`;
+                    const fontSize = Math.max(20, Math.floor(image.width / 10));
+                    ctx.font = `bold ${fontSize}px Impact, Arial, sans-serif`;
                     ctx.fillStyle = 'white';
                     ctx.strokeStyle = 'black';
-                    ctx.lineWidth = Math.max(2, Math.floor(fontSize / 8));
+                    ctx.lineWidth = Math.max(2, Math.floor(fontSize / 10));
                     ctx.textAlign = 'center';
+                    ctx.lineJoin = 'round'; // Agar sudut teks terlihat tebal dan rapi
 
                     function drawMemeText(text, x, y, baseline) {
                         ctx.textBaseline = baseline;
@@ -594,13 +595,13 @@ async function connectToWhatsApp() {
                     }
 
                     if (topText) {
-                        // Beri jarak aman 5% dari atas
-                        drawMemeText(topText, image.width / 2, image.height * 0.05, 'top');
+                        // Posisi Y sedikit ke bawah dari batas atas (misal 10% dari tinggi gambar)
+                        drawMemeText(topText, image.width / 2, image.height * 0.12, 'top');
                     }
 
                     if (bottomText) {
-                        // Beri jarak aman 5% dari bawah
-                        drawMemeText(bottomText, image.width / 2, image.height - (image.height * 0.05), 'bottom');
+                        // Posisi Y sedikit ke atas dari batas bawah (misal 12% dari tinggi gambar)
+                        drawMemeText(bottomText, image.width / 2, image.height - (image.height * 0.12), 'bottom');
                     }
 
                     const processedBuffer = canvas.toBuffer('image/jpeg');
