@@ -760,48 +760,72 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // STIKER
-            else if (command === '.sticker' || command === '.stiker' || command === '.s') {
-                try {
-                    const contextInfo = msg.message.extendedTextMessage?.contextInfo;
-                    const qMsg = contextInfo?.quotedMessage;
-                    const isDirectImage = msg.message.imageMessage;
-                    const isDirectVideo = msg.message.videoMessage;
-                    
-                    let quotedMediaMsg = qMsg?.imageMessage || 
-                                         qMsg?.videoMessage ||
-                                         qMsg?.ephemeralMessage?.message?.imageMessage || 
-                                         qMsg?.ephemeralMessage?.message?.videoMessage || 
-                                         qMsg?.viewOnceMessage?.message?.imageMessage ||
-                                         qMsg?.viewOnceMessage?.message?.videoMessage;
+            // STIKER MEME (SMEME)
+else if (command === '.smeme' || command === '.memesticker') {
+    try {
+        const contextInfo = msg.message.extendedTextMessage?.contextInfo;
+        const qMsg = contextInfo?.quotedMessage;
+        const isDirectImage = msg.message.imageMessage;
+        
+        let quotedImageMsg = qMsg?.imageMessage || 
+                             qMsg?.ephemeralMessage?.message?.imageMessage || 
+                             qMsg?.viewOnceMessage?.message?.imageMessage ||
+                             qMsg?.viewOnceMessageV2?.message?.imageMessage;
 
-                    if (!isDirectImage && !isDirectVideo && !quotedMediaMsg) {
-                        return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto/video dengan caption *.stiker*!' }, { quoted: msg });
-                    }
+        if (!isDirectImage && !quotedImageMsg) {
+            return sock.sendMessage(from, { text: '⚠️ Kirim atau reply foto dengan format:\n*.smeme <teks atas>* atau\n*.smeme <teks atas> | <teks bawah>*' }, { quoted: msg });
+        }
 
-                    let mediaTarget = msg;
-                    let mimeType = isDirectVideo ? 'video/mp4' : (isDirectImage ? 'image/jpeg' : (quotedMediaMsg?.mimetype || 'image/jpeg'));
+        if (!textInput) {
+            return sock.sendMessage(from, { text: '⚠️ Masukkan teks meme-nya!\nContoh: *.smeme Teks Atas | Teks Bawah*' }, { quoted: msg });
+        }
 
-                    if (quotedMediaMsg) {
-                        mediaTarget = {
-                            key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
-                            message: qMsg
-                        };
-                    }
+        await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
 
-                    let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer kosong.');
+        let mediaTarget = msg;
+        if (quotedImageMsg) {
+            mediaTarget = {
+                key: { remoteJid: from, fromMe: false, id: contextInfo.stanzaId, participant: contextInfo.participant || from },
+                message: qMsg
+            };
+        }
 
-                    let stickerBuffer = await makeSticker(mediaBuffer, mimeType);
-                    await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
-                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+        let mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
+        if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Gagal mendownload media.');
 
-                } catch (err) {
-                    console.error('Error Sticker Detail Lengkap:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker. Error: ${err.message}` }, { quoted: msg });
-                }
-            }
+        // Memakai uploadToTelegraph
+        let imageUrl = await uploadToTelegraph(mediaBuffer, 'meme.jpg');
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+            return sock.sendMessage(from, { text: '❌ Gagal mengunggah media sementara.' }, { quoted: msg });
+        }
 
+        let topText = '';
+        let bottomText = '';
+
+        if (textInput.includes('|')) {
+            let parts = textInput.split('|').map(s => s.trim());
+            topText = parts[0] || '';
+            bottomText = parts[1] || '';
+        } else {
+            topText = textInput;
+            bottomText = '';
+        }
+
+        let memeApiUrl = `https://api.siputzx.my.id/api/maker/meme?url=${encodeURIComponent(imageUrl)}&text1=${encodeURIComponent(topText)}&text2=${encodeURIComponent(bottomText)}`;
+        let memeRes = await fetch(memeApiUrl);
+        if (!memeRes.ok) throw new Error(`Gagal merender meme (Status: ${memeRes.status})`);
+        
+        let memeBuffer = Buffer.from(await memeRes.arrayBuffer());
+        let stickerBuffer = await makeSticker(memeBuffer, 'image/jpeg');
+
+        await sock.sendMessage(from, { sticker: stickerBuffer }, { quoted: msg });
+        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+
+    } catch (err) {
+        console.error('Error Smeme:', err);
+        await sock.sendMessage(from, { text: `❌ Gagal merender gambar meme.` }, { quoted: msg });
+    }
+}
             // WATERMARK STIKER 
             else if (command === '.wm' || command === '.watermark') {
                 try {
