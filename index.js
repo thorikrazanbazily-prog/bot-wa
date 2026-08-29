@@ -8,6 +8,7 @@ import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { writeFile, unlink } from 'fs/promises';
+import { Jimp } from 'jimp';
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
@@ -532,7 +533,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-             // SMEME (Stiker Meme - Teks Atas & Bawah)
+                         // SMEME (Stiker Meme Lokal dengan Jimp)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -553,8 +554,8 @@ async function connectToWhatsApp() {
 
                     // Pisahkan teks atas dan bawah
                     let parts = textInput.split('|');
-                    let topText = parts[0] ? parts[0].trim() : '_';
-                    let bottomText = parts[1] ? parts[1].trim() : '_';
+                    let topText = parts[0] ? parts[0].trim().toUpperCase() : '';
+                    let bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
 
                     // Unduh media gambar dari pesan
                     let mediaTarget;
@@ -574,39 +575,45 @@ async function connectToWhatsApp() {
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
                     if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
 
-                    // Ubah buffer gambar ke Base64 Data URL
-                    let ext = 'jpg';
-                    if (mimeType.includes('png')) ext = 'png';
-                    else if (mimeType.includes('webp')) ext = 'webp';
+                    // Proses gambar menggunakan Jimp secara lokal
+                    const image = await Jimp.read(mediaBuffer);
                     
-                    const base64Image = `data:${mimeType};base64,${mediaBuffer.toString('base64')}`;
+                    // Ubah ukuran gambar agar proporsional untuk stiker (maksimal 512px)
+                    image.scaleToFit({ w: 512, h: 512 });
 
-                    // Kirim request POST langsung ke API Memegen (Tanpa Telegraph)
-                    const response = await fetch('https://api.memegen.link/images/custom', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            background: base64Image,
-                            lines: [topText, bottomText],
-                            extension: 'png'
-                        })
-                    });
+                    // Muat font bawaan Jimp (Font putih tebal dengan outline hitam standar meme)
+                    // Jika font bawaan tidak ditemukan, Jimp akan menggunakan teks standar
+                    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_WHITE);
 
-                    const resJson = await response.json();
-                    
-                    if (!response.ok || !resJson.url) {
-                        throw new Error(resJson.message || 'Gagal memproses gambar dari meme generator.');
+                    // Cetak teks atas jika ada
+                    if (topText) {
+                        image.print({
+                            font: font,
+                            x: 10,
+                            y: 10,
+                            text: topText,
+                            maxWidth: image.bitmap.width - 20,
+                            maxHeight: 100
+                        }, (err) => { /* handle alignment jika perlu */ });
                     }
 
-                    // Ambil hasil gambar meme jadi
-                    const memeRes = await fetch(resJson.url);
-                    const memeBuffer = await memeRes.buffer();
+                    // Cetak teks bawah jika ada
+                    if (bottomText) {
+                        image.print({
+                            font: font,
+                            x: 10,
+                            y: image.bitmap.height - 80,
+                            text: bottomText,
+                            maxWidth: image.bitmap.width - 20,
+                            maxHeight: 100
+                        }, (err) => { /* handle alignment jika perlu */ });
+                    }
 
-                    // Buat stiker
-                    const sticker = new Sticker(memeBuffer, {
+                    // Ubah hasil edit ke buffer PNG
+                    const processedBuffer = await image.getBuffer('image/png');
+
+                    // Buat stiker menggunakan wa-sticker-formatter
+                    const sticker = new Sticker(processedBuffer, {
                         pack: '',
                         author: '',
                         type: StickerTypes.FULL,
@@ -619,8 +626,8 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
 
                 } catch (err) {
-                    console.error('Error Smeme:', err);
-                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme. Pastikan ukuran gambar tidak terlalu besar dan gunakan pemisah '|'.\nContoh: .smeme teks atas | teks bawah` }, { quoted: msg });
+                    console.error('Error Smeme Lokal:', err);
+                    await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme secara lokal. Pastikan format gambar benar!` }, { quoted: msg });
                 }
             }
 
