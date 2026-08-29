@@ -11,7 +11,7 @@ import { writeFile, unlink } from 'fs/promises';
 // ==========================================
 // KONFIGURASI OWNER & VIP
 // ==========================================
-const ownerNumbers = ['6281298697777']; // Nomor Owner Anda
+const ownerNumbers = ['255164158062616']; // Nomor Owner Anda
 const vipNumbers = []; // Tambahkan nomor VIP jika ada (format string: '628xxxxxxxx')
 
 // ==========================================
