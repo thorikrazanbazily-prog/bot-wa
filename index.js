@@ -650,7 +650,7 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme: ${err.message}` }, { quoted: msg });
                 }
             }
-
+                
             // BUTTON CN
             else if (command === '.cn') {
                 let query = textInput || 'riq ganteng';
