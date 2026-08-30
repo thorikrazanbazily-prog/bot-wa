@@ -1,11 +1,11 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-const fetch = require('node-fetch'); 
-const axios = require('axios');
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const { createCanvas, loadImage } = require('@napi-rs/canvas');
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
+import pino from 'pino';
+import qrcode from 'qrcode-terminal';
+import fs from 'fs';
+import fetch from 'node-fetch'; 
+import axios from 'axios';
+import { Sticker, StickerTypes } from 'wa-sticker-formatter';
+import { createCanvas, loadImage } from '@napi-rs/canvas';
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
@@ -538,7 +538,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-            // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
+                        // SMEME (Stiker Meme Menggunakan @napi-rs/canvas dengan Fix Font)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -579,7 +579,7 @@ async function connectToWhatsApp() {
                     }
 
                     const mediaBuffer = await downloadMediaMessage(mediaTarget, 'buffer', {});
-                    if (!mediaBuffer || mediaBuffer.length === 0) throw new Error('Buffer gambar kosong.');
+                    if (!mediaBuffer || mediaBuffer.length ===0) throw new Error('Buffer gambar kosong.');
 
                     const image = await loadImage(mediaBuffer);
                     const canvas = createCanvas(image.width, image.height);
@@ -588,12 +588,12 @@ async function connectToWhatsApp() {
                     // Gambar ulang foto asli ke canvas
                     ctx.drawImage(image, 0, 0, image.width, image.height);
 
-                    // Konfigurasi style teks meme agar tebal dan ada garis hitam pinggirnya
-                    const fontSize = Math.max(16, Math.floor(image.width / 8));
-                    ctx.font = `900 ${fontSize}px sans-serif`;
+                    // Menggunakan font standar yang aman terbaca di sistem Android/Termux
+                    const fontSize = Math.max(20, Math.floor(image.width / 7));
+                    ctx.font = `bold ${fontSize}px Arial, sans-serif`;
                     ctx.fillStyle = '#FFFFFF';
                     ctx.strokeStyle = '#000000';
-                    ctx.lineWidth = Math.max(1.5, Math.floor(fontSize / 15)); 
+                    ctx.lineWidth = Math.max(2, Math.floor(fontSize / 12)); 
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
 
@@ -619,16 +619,16 @@ async function connectToWhatsApp() {
                         ctx.fillText(line, x, currentY);
                     }
 
-                    const maxWidth = image.width * 0.9;
-                    const lineHeight = fontSize * 1.1;
+                    const maxWidth = image.width * 0.95;
+                    const lineHeight = fontSize * 1.15;
 
                     if (topText) {
-                        wrapText(topText, image.width / 2, image.height * 0.05, maxWidth, lineHeight);
+                        wrapText(topText, image.width / 2, image.height * 0.03, maxWidth, lineHeight);
                     }
 
                     if (bottomText) {
                         ctx.textBaseline = 'bottom';
-                        wrapText(bottomText, image.width / 2, image.height - (image.height * 0.05), maxWidth, lineHeight);
+                        wrapText(bottomText, image.width / 2, image.height - (image.height * 0.03), maxWidth, lineHeight);
                     }
 
                     const processedBuffer = canvas.toBuffer('image/jpeg');
@@ -650,7 +650,7 @@ async function connectToWhatsApp() {
                     await sock.sendMessage(from, { text: `❌ Gagal membuat stiker meme: ${err.message}` }, { quoted: msg });
                 }
             }
-
+                
             // BUTTON CN
             else if (command === '.cn') {
                 let query = textInput || 'riq ganteng';
