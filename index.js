@@ -1,8 +1,9 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import fs from 'fs';
 import fetch from 'node-fetch'; 
+import axios from 'axios';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 
@@ -135,6 +136,51 @@ const saveWelcomeSettings = (settings) => {
         console.error('Gagal menyimpan database welcome:', e);
     }
 };
+
+// ==========================================
+// PINTEREST HELPER (DISEMPURNAKAN)
+// ==========================================
+async function handlePinCommand(sock, msg, from, query) {
+    if (!query) {
+        return await sock.sendMessage(from, { text: '⚠️ Masukkan kata kunci pencarian!\nContoh: `.pin aesthetic dark`' }, { quoted: msg });
+    }
+
+    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
+
+    try {
+        const res = await fetch(`https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(query)}`).then(r => r.json()).catch(() => null);
+        
+        let imageUrl = null;
+
+        const list = res?.result || res?.data || res;
+        if (Array.isArray(list) && list.length > 0) {
+            const randomItem = list[Math.floor(Math.random() * list.length)];
+            imageUrl = typeof randomItem === 'string' ? randomItem : (randomItem.media_url || randomItem.image || randomItem.url || randomItem.images_url);
+        }
+
+        if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
+            throw new Error('API tidak mengembalikan URL gambar yang valid.');
+        }
+
+        const responseImg = await axios.get(imageUrl, { 
+            responseType: 'arraybuffer',
+            timeout: 10000 
+        });
+        const buffer = Buffer.from(responseImg.data);
+
+        await sock.sendMessage(from, { 
+            image: buffer, 
+            caption: `📌 *PINTEREST SEARCH*\n🔍 *Query:* ${query}` 
+        }, { quoted: msg });
+
+        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
+
+    } catch (err) {
+        console.error('Error Pinterest Command:', err.message);
+        await sock.sendMessage(from, { text: '❌ Gagal mengambil gambar dari Pinterest. API mungkin sedang gangguan atau kata kunci tidak ditemukan!' }, { quoted: msg });
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } });
+    }
+}
 
 // ==========================================
 // KONEKSI UTAMA BOT
@@ -347,7 +393,7 @@ async function connectToWhatsApp() {
 * ➔ *.wm <pack>* : Ubah watermark stiker
 * ➔ *.smeme <atas> | <bawah>* : Buat stiker meme dengan teks
 * ➔ *.tts <teks>* : Ubah teks jadi Voice Note (Suara Google)
-* ➔ *.pinterest <kata kunci>* : Cari foto estetik dari Pinterest
+* ➔ *.pinterest <kata kunci>* / *.pin* : Cari foto estetik dari Pinterest
 * ➔ *.short <link>* : Memperpendek URL/link panjang
 * ➔ *.rvo* : Reply foto/video sekali lihat (view once)
 
@@ -446,49 +492,12 @@ async function connectToWhatsApp() {
             }
 
             // PINTEREST SEARCH
-            else if (command === '.pinterest' || command === '.pin') {
-                if (!textInput) {
-                    return sock.sendMessage(from, { text: '⚠️ Masukkan kata kunci gambar!\nContoh: *.pinterest wallpaper estetik*' }, { quoted: msg });
-                }
-                await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } });
-                try {
-                    const apis = [
-                        `https://api.siputzx.my.id/api/s/pinterest?query=${encodeURIComponent(textInput)}`,
-                        `https://itzpire.com/search/pinterest?query=${encodeURIComponent(textInput)}`
-                    ];
-                    
-                    let imageUrl = null;
-                    for (let apiUrl of apis) {
-                        try {
-                            const response = await fetch(apiUrl);
-                            const res = await response.json();
-                            if (res && (res.status || res.code === 200) && res.data) {
-                                const list = Array.isArray(res.data) ? res.data : (res.data.result || res.data);
-                                if (list && list.length > 0) {
-                                    const randItem = list[Math.floor(Math.random() * list.length)];
-                                    imageUrl = typeof randItem === 'string' ? randItem : (randItem.images_url || randItem.url || randItem.link);
-                                    if (imageUrl) break;
-                                }
-                            }
-                        } catch (e) {
-                            continue;
-                        }
-                    }
-
-                    if (imageUrl) {
-                        await sock.sendMessage(from, { image: { url: imageUrl }, caption: `📌 *PINTEREST SEARCH*\n🔍 *Query:* ${textInput}` }, { quoted: msg });
-                        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-                    } else {
-                        throw new Error('Gambar Pinterest tidak ditemukan.');
-                    }
-                } catch (err) {
-                    console.error('Error Pinterest:', err);
-                    await sock.sendMessage(from, { text: '❌ Gambar tidak ditemukan atau server API sedang sibuk.' }, { quoted: msg });
-                }
+            else if (command === '.pin' || command === '.pinterest') {
+                await handlePinCommand(sock, msg, from, textInput);
             }
 
             // STIKER / S (MEMBUAT STIKER DARI FOTO/VIDEO)
-            else if (command === '.stiker' || command === '.s') {
+            else if (command === '.s' || command === '.stiker') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
                     const qMsg = contextInfo?.quotedMessage;
@@ -529,7 +538,7 @@ async function connectToWhatsApp() {
                 }
             }
 
-                        // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
+            // SMEME (Stiker Meme Menggunakan @napi-rs/canvas)
             else if (command === '.smeme') {
                 try {
                     const contextInfo = msg.message.extendedTextMessage?.contextInfo;
@@ -556,7 +565,6 @@ async function connectToWhatsApp() {
                         topText = parts[0] ? parts[0].trim().toUpperCase() : '';
                         bottomText = parts[1] ? parts[1].trim().toUpperCase() : '';
                     } else {
-                        // Jika tidak pakai |, teks otomatis jadi teks atas (atau bawah terserah Anda)
                         topText = textInput.trim().toUpperCase();
                     }
 
@@ -577,31 +585,50 @@ async function connectToWhatsApp() {
                     const canvas = createCanvas(image.width, image.height);
                     const ctx = canvas.getContext('2d');
 
+                    // Gambar ulang foto asli ke canvas
                     ctx.drawImage(image, 0, 0, image.width, image.height);
 
-                    // Ukuran font proporsional berdasarkan lebar gambar
-                    const fontSize = Math.max(20, Math.floor(image.width / 10));
-                    ctx.font = `bold ${fontSize}px Impact, Arial, sans-serif`;
-                    ctx.fillStyle = 'white';
-                    ctx.strokeStyle = 'black';
-                    ctx.lineWidth = Math.max(2, Math.floor(fontSize / 10));
+                    // Konfigurasi style teks meme agar tebal dan ada garis hitam pinggirnya
+                    const fontSize = Math.max(16, Math.floor(image.width / 8));
+                    ctx.font = `900 ${fontSize}px sans-serif`;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = Math.max(1.5, Math.floor(fontSize / 15)); 
                     ctx.textAlign = 'center';
-                    ctx.lineJoin = 'round'; // Agar sudut teks terlihat tebal dan rapi
+                    ctx.textBaseline = 'top';
 
-                    function drawMemeText(text, x, y, baseline) {
-                        ctx.textBaseline = baseline;
-                        ctx.strokeText(text, x, y);
-                        ctx.fillText(text, x, y);
+                    function wrapText(text, x, y, maxWidth, lineHeight) {
+                        const words = text.split(' ');
+                        let line = '';
+                        let currentY = y;
+
+                        for(let n = 0; n < words.length; n++) {
+                            let testLine = line + words[n] + ' ';
+                            let metrics = ctx.measureText(testLine);
+                            let testWidth = metrics.width;
+                            if (testWidth > maxWidth && n > 0) {
+                                ctx.strokeText(line, x, currentY);
+                                ctx.fillText(line, x, currentY);
+                                line = words[n] + ' ';
+                                currentY += lineHeight;
+                            } else {
+                                line = testLine;
+                            }
+                        }
+                        ctx.strokeText(line, x, currentY);
+                        ctx.fillText(line, x, currentY);
                     }
 
+                    const maxWidth = image.width * 0.9;
+                    const lineHeight = fontSize * 1.1;
+
                     if (topText) {
-                        // Posisi Y sedikit ke bawah dari batas atas (misal 10% dari tinggi gambar)
-                        drawMemeText(topText, image.width / 2, image.height * 0.12, 'top');
+                        wrapText(topText, image.width / 2, image.height * 0.05, maxWidth, lineHeight);
                     }
 
                     if (bottomText) {
-                        // Posisi Y sedikit ke atas dari batas bawah (misal 12% dari tinggi gambar)
-                        drawMemeText(bottomText, image.width / 2, image.height - (image.height * 0.12), 'bottom');
+                        ctx.textBaseline = 'bottom';
+                        wrapText(bottomText, image.width / 2, image.height - (image.height * 0.05), maxWidth, lineHeight);
                     }
 
                     const processedBuffer = canvas.toBuffer('image/jpeg');
