@@ -1,19 +1,26 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } = require('@whiskeysockets/baileys');
-const pino = require('pino');
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const { TTScraper } = require('tiktok-scraper-ts');
+import baileys from '@whiskeysockets/baileys';
+const { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, downloadMediaMessage } = baileys;
 
-// Inisialisasi TikTok Scraper (Tanpa API Key)
+import pino from 'pino';
+import qrcode from 'qrcode-terminal';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import axios from 'axios';
+import { TTScraper } from 'tiktok-scraper-ts';
+
+// Menentukan __dirname untuk ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Inisialisasi TikTok Scraper
 const TikTokScraper = new TTScraper();
 
 // ==========================================
 // KONFIGURASI OWNER & VIP
 // ==========================================
-const ownerNumbers = ['255164158062616']; // Ubah/Tambahkan nomor Owner Anda di sini
-const vipNumbers = []; // Tambahkan nomor VIP jika ada
+const ownerNumbers = ['255164158062616'];
+const vipNumbers = [];
 
 // ==========================================
 // FILE LOKAL DATABASE & PATH FOTO
@@ -82,14 +89,11 @@ const saveVerifiedUsers = (users) => {
 };
 
 // ==========================================
-// FUNGSI FETCH PROFIL TIKTOK (TIKTOK SCRAPER TS)
+// FUNGSI FETCH PROFIL TIKTOK
 // ==========================================
 async function fetchTikTokProfile(username) {
     const cleanUsername = username.replace('@', '').trim();
 
-    // -------------------------------------------------------------
-    // UTAMA: TIKTOK-SCRAPER-TS (GRATIS / SCRAPER)
-    // -------------------------------------------------------------
     try {
         const userProfile = await TikTokScraper.user(cleanUsername);
 
@@ -117,9 +121,6 @@ async function fetchTikTokProfile(username) {
         console.error('TikTok Scraper Error:', err.message || err);
     }
 
-    // -------------------------------------------------------------
-    // FALLBACK: TIKWM PUBLIC API (Jika Scraper Terhalang CAPTCHA)
-    // -------------------------------------------------------------
     try {
         const fallbackRes = await axios({
             method: 'POST',
@@ -597,7 +598,7 @@ async function connectToWhatsApp() {
                 await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
             }
 
-            // VERIFIKASI AKUN TIKTOK (MENGGUNAKAN TIKTOK SCRAPER TS)
+            // VERIFIKASI AKUN TIKTOK
             else if (command === '.verif' || command === '.verifikasi') {
                 if (!textInput) {
                     return sendPhotoResponse(sock, from, '⚠️ Masukkan username TikTok kamu!\n\nContoh:\n*.verif username_tiktok*', msg);
